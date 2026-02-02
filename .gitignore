@@ -17,5 +17,3 @@ npm-debug.log*
 .claude/
 .serena/
 .tmpdata/
-
-src_old

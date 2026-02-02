@@ -1,8 +1,26 @@
-// Served at /setup/app.js
-// No fancy syntax: keep it maximally compatible.
 
 (function () {
+  // DOM Elements - Step Navigation
+  var steps = document.querySelectorAll('.step');
+  var stepContents = document.querySelectorAll('.step-content');
+  var stepConnectors = document.querySelectorAll('.step-connector');
+  var currentStep = 1;
+
+  // Navigation Buttons
+  var nextToStep2 = document.getElementById('nextToStep2');
+  var nextToStep3 = document.getElementById('nextToStep3');
+  var backToStep1 = document.getElementById('backToStep1');
+  var backToStep2 = document.getElementById('backToStep2');
+
+  // Toggles
+  var toggleConsole = document.getElementById('toggleConsole');
+  var consoleSection = document.getElementById('consoleSection');
+  var toggleConfig = document.getElementById('toggleConfig');
+  var configSection = document.getElementById('configSection');
+
+  // Original elements
   var statusEl = document.getElementById('status');
+  var statusDot = document.getElementById('statusDot');
   var authGroupEl = document.getElementById('authGroup');
   var authChoiceEl = document.getElementById('authChoice');
   var logEl = document.getElementById('log');
@@ -20,11 +38,106 @@
   var configSaveEl = document.getElementById('configSave');
   var configOutEl = document.getElementById('configOut');
 
-  function setStatus(s) {
-    statusEl.textContent = s;
+  // Step Navigation Functions
+  function goToStep(stepNumber) {
+    currentStep = stepNumber;
+
+    // Update step indicators
+    steps.forEach(function (step, index) {
+      var stepNum = index + 1;
+      step.classList.remove('active', 'completed');
+
+      if (stepNum < currentStep) {
+        step.classList.add('completed');
+      } else if (stepNum === currentStep) {
+        step.classList.add('active');
+      }
+    });
+
+    // Update connectors
+    stepConnectors.forEach(function (connector, index) {
+      if (index < currentStep - 1) {
+        connector.classList.add('completed');
+      } else {
+        connector.classList.remove('completed');
+      }
+    });
+
+    // Show/hide content
+    stepContents.forEach(function (content) {
+      var contentStep = parseInt(content.getAttribute('data-step'));
+      if (contentStep === currentStep) {
+        content.classList.add('active');
+      } else {
+        content.classList.remove('active');
+      }
+    });
+
+    // Scroll to top of main container
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // Step click navigation
+  steps.forEach(function (step) {
+    step.addEventListener('click', function () {
+      var stepNum = parseInt(step.getAttribute('data-step'));
+      goToStep(stepNum);
+    });
+  });
+
+  // Button navigation
+  if (nextToStep2) {
+    nextToStep2.addEventListener('click', function () {
+      goToStep(2);
+    });
+  }
+
+  if (nextToStep3) {
+    nextToStep3.addEventListener('click', function () {
+      goToStep(3);
+    });
+  }
+
+  if (backToStep1) {
+    backToStep1.addEventListener('click', function () {
+      goToStep(1);
+    });
+  }
+
+  if (backToStep2) {
+    backToStep2.addEventListener('click', function () {
+      goToStep(2);
+    });
+  }
+
+  // Toggle functions
+  function setupToggle(toggleEl, sectionEl) {
+    if (toggleEl && sectionEl) {
+      toggleEl.addEventListener('click', function () {
+        toggleEl.classList.toggle('open');
+        sectionEl.classList.toggle('open');
+      });
+    }
+  }
+
+  setupToggle(toggleConsole, consoleSection);
+  setupToggle(toggleConfig, configSection);
+
+  // Status Functions
+  function setStatus(s, isConfigured) {
+    if (statusEl) statusEl.textContent = s;
+    if (statusDot) {
+      if (isConfigured) {
+        statusDot.classList.add('configured');
+      } else {
+        statusDot.classList.remove('configured');
+      }
+    }
   }
 
   function renderAuth(groups) {
+    if (!authGroupEl) return;
+
     authGroupEl.innerHTML = '';
     for (var i = 0; i < groups.length; i++) {
       var g = groups[i];
@@ -39,14 +152,16 @@
       for (var j = 0; j < groups.length; j++) {
         if (groups[j].value === authGroupEl.value) sel = groups[j];
       }
-      authChoiceEl.innerHTML = '';
-      var opts = (sel && sel.options) ? sel.options : [];
-      for (var k = 0; k < opts.length; k++) {
-        var o = opts[k];
-        var opt2 = document.createElement('option');
-        opt2.value = o.value;
-        opt2.textContent = o.label + (o.hint ? ' - ' + o.hint : '');
-        authChoiceEl.appendChild(opt2);
+      if (authChoiceEl) {
+        authChoiceEl.innerHTML = '';
+        var opts = (sel && sel.options) ? sel.options : [];
+        for (var k = 0; k < opts.length; k++) {
+          var o = opts[k];
+          var opt2 = document.createElement('option');
+          opt2.value = o.value;
+          opt2.textContent = o.label + (o.hint ? ' - ' + o.hint : '');
+          authChoiceEl.appendChild(opt2);
+        }
       }
     };
 
@@ -67,13 +182,15 @@
   }
 
   function refreshStatus() {
-    setStatus('Loading...');
+    setStatus('Loading...', false);
     return httpJson('/setup/api/status').then(function (j) {
       var ver = j.openclawVersion ? (' | ' + j.openclawVersion) : '';
-      setStatus((j.configured ? 'Configured - open /openclaw' : 'Not configured - run setup below') + ver);
+      var isConfigured = j.configured;
+      var statusText = isConfigured ? 'Configured' : 'Not configured';
+      setStatus(statusText + ver, isConfigured);
       renderAuth(j.authGroups || []);
       if (j.channelsAddHelp && j.channelsAddHelp.indexOf('telegram') === -1) {
-        logEl.textContent += '\nNote: this openclaw build does not list telegram in `channels add --help`. Telegram auto-add will be skipped.\n';
+        if (logEl) logEl.textContent += '\nNote: this openclaw build does not list telegram in `channels add --help`. Telegram auto-add will be skipped.\n';
       }
 
       // Attempt to load config editor content if present.
@@ -82,39 +199,43 @@
       }
 
     }).catch(function (e) {
-      setStatus('Error: ' + String(e));
+      setStatus('Error: ' + String(e), false);
     });
   }
 
-  document.getElementById('run').onclick = function () {
-    var payload = {
-      flow: document.getElementById('flow').value,
-      authChoice: authChoiceEl.value,
-      authSecret: document.getElementById('authSecret').value,
-      telegramToken: document.getElementById('telegramToken').value,
-      discordToken: document.getElementById('discordToken').value,
-      slackBotToken: document.getElementById('slackBotToken').value,
-      slackAppToken: document.getElementById('slackAppToken').value
+  // Run Setup
+  var runBtn = document.getElementById('run');
+  if (runBtn) {
+    runBtn.onclick = function () {
+      var payload = {
+        flow: document.getElementById('flow').value,
+        authChoice: authChoiceEl ? authChoiceEl.value : '',
+        authSecret: document.getElementById('authSecret').value,
+        telegramToken: document.getElementById('telegramToken').value,
+        discordToken: document.getElementById('discordToken').value,
+        slackBotToken: document.getElementById('slackBotToken').value,
+        slackAppToken: document.getElementById('slackAppToken').value
+      };
+
+      if (logEl) logEl.textContent = 'Running setup... This may take up to 30 seconds...\n';
+
+      fetch('/setup/api/run', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(function (res) {
+        return res.text();
+      }).then(function (text) {
+        var j;
+        try { j = JSON.parse(text); } catch (_e) { j = { ok: false, output: text }; }
+        if (logEl) logEl.textContent += (j.output || JSON.stringify(j, null, 2));
+        return refreshStatus();
+      }).catch(function (e) {
+        if (logEl) logEl.textContent += '\nError: ' + String(e) + '\n';
+      });
     };
-
-    logEl.textContent = 'Running setup... This may take up to 30 seconds...\n';
-
-    fetch('/setup/api/run', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).then(function (res) {
-      return res.text();
-    }).then(function (text) {
-      var j;
-      try { j = JSON.parse(text); } catch (_e) { j = { ok: false, output: text }; }
-      logEl.textContent += (j.output || JSON.stringify(j, null, 2));
-      return refreshStatus();
-    }).catch(function (e) {
-      logEl.textContent += '\nError: ' + String(e) + '\n';
-    });
-  };
+  }
 
   // Pairing approve helper
   var pairingBtn = document.getElementById('pairingApprove');
@@ -129,26 +250,30 @@
       }
       var code = prompt('Enter pairing code (e.g. 3EY4PUYS):');
       if (!code) return;
-      logEl.textContent += '\nApproving pairing for ' + channel + '...\n';
+      if (logEl) logEl.textContent += '\nApproving pairing for ' + channel + '...\n';
       fetch('/setup/api/pairing/approve', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ channel: channel, code: code.trim() })
       }).then(function (r) { return r.text(); })
-        .then(function (t) { logEl.textContent += t + '\n'; })
-        .catch(function (e) { logEl.textContent += 'Error: ' + String(e) + '\n'; });
+        .then(function (t) { if (logEl) logEl.textContent += t + '\n'; })
+        .catch(function (e) { if (logEl) logEl.textContent += 'Error: ' + String(e) + '\n'; });
     };
   }
 
-  document.getElementById('reset').onclick = function () {
-    if (!confirm('Reset setup? This deletes the config file so onboarding can run again.')) return;
-    logEl.textContent = 'Resetting...\n';
-    fetch('/setup/api/reset', { method: 'POST', credentials: 'same-origin' })
-      .then(function (res) { return res.text(); })
-      .then(function (t) { logEl.textContent += t + '\n'; return refreshStatus(); })
-      .catch(function (e) { logEl.textContent += 'Error: ' + String(e) + '\n'; });
-  };
+  // Reset
+  var resetBtn = document.getElementById('reset');
+  if (resetBtn) {
+    resetBtn.onclick = function () {
+      if (!confirm('Reset setup? This deletes the config file so onboarding can run again.')) return;
+      if (logEl) logEl.textContent = 'Resetting...\n';
+      fetch('/setup/api/reset', { method: 'POST', credentials: 'same-origin' })
+        .then(function (res) { return res.text(); })
+        .then(function (t) { if (logEl) logEl.textContent += t + '\n'; return refreshStatus(); })
+        .catch(function (e) { if (logEl) logEl.textContent += 'Error: ' + String(e) + '\n'; });
+    };
+  }
 
   refreshStatus();
 
@@ -209,3 +334,5 @@
   if (configSaveEl) configSaveEl.onclick = saveConfigRaw;
 
 })();
+
+// update later
