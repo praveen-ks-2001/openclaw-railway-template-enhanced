@@ -436,6 +436,7 @@ app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
   res.json({
     configured: isConfigured(),
     gatewayTarget: GATEWAY_TARGET,
+    gatewayToken: OPENCLAW_GATEWAY_TOKEN,
     openclawVersion: version.output.trim(),
     channelsAddHelp: channelsHelp.output,
     authGroups,

@@ -33,7 +33,6 @@
       box-sizing: border-box;
     }
 
-    /* update the commentlater */
     body {
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
       background: var(--bg-primary);
@@ -61,7 +60,6 @@
       gap: 0.75rem;
     }
 
-
     .logo-container img {
       height: 40px;
     }
@@ -87,6 +85,11 @@
 
     .status-dot.configured {
       background: var(--accent-green);
+      animation: none;
+    }
+
+    .status-dot.loading {
+      background: var(--accent-orange);
     }
 
     @keyframes pulse {
@@ -184,13 +187,37 @@
       background: var(--accent-green);
     }
 
-    /* Main Content */
-    .main-container {
-      max-width: 800px;
+    /* Layout: Main + Sidebar */
+    .page-layout {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 2rem;
+      max-width: 1400px;
       margin: 0 auto;
       padding: 2rem;
     }
 
+    .main-content {
+      min-width: 0;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 100px;
+      height: fit-content;
+    }
+
+    .sidebar-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      padding-left: 0.25rem;
+    }
+
+    /* Step Content */
     .step-content {
       display: none;
       animation: fadeIn 0.4s ease;
@@ -244,6 +271,11 @@
     .card:hover {
       border-color: var(--accent-red);
       box-shadow: var(--shadow-glow);
+    }
+
+    .card.compact {
+      padding: 1rem;
+      margin-bottom: 0.75rem;
     }
 
     .card-title {
@@ -399,54 +431,58 @@
       justify-content: flex-end;
     }
 
-    /* Toggle Card */
-    .toggle-card {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 1rem 1.25rem;
+    .btn-sm {
+      padding: 0.5rem 1rem;
+      font-size: 0.8125rem;
+    }
+
+    /* Summary Box */
+    .summary-box {
       background: var(--bg-secondary);
       border: 1px solid var(--border-color);
-      border-radius: 10px;
-      margin-top: 1rem;
-      cursor: pointer;
-      transition: all 0.2s ease;
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
     }
 
-    .toggle-card:hover {
-      border-color: var(--accent-red);
+    .summary-box h4 {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
     }
 
-    .toggle-card-content h4 {
-      font-size: 0.9375rem;
-      font-weight: 500;
-      margin-bottom: 0.25rem;
-    }
-
-    .toggle-card-content p {
+    .summary-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border-color);
       font-size: 0.8125rem;
+    }
+
+    .summary-item:last-child {
+      border-bottom: none;
+    }
+
+    .summary-label {
       color: var(--text-muted);
     }
 
-    .toggle-icon {
-      font-size: 1.25rem;
+    .summary-value {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .summary-value.enabled {
+      color: var(--accent-green);
+    }
+
+    .summary-value.disabled {
       color: var(--text-muted);
-      transition: transform 0.3s ease;
-    }
-
-    .toggle-card.open .toggle-icon {
-      transform: rotate(180deg);
-    }
-
-    /* Collapsible Content */
-    .collapsible-content {
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height 0.3s ease;
-    }
-
-    .collapsible-content.open {
-      max-height: 1500px;
     }
 
     /* Console & Editor */
@@ -459,16 +495,16 @@
 
     .console-bar select {
       flex: 1;
-      min-width: 200px;
+      min-width: 150px;
+      padding: 0.625rem 0.75rem;
+      font-size: 0.8125rem;
     }
 
     .console-bar input {
       flex: 1;
-      min-width: 150px;
-    }
-
-    .console-bar button {
-      flex-shrink: 0;
+      min-width: 100px;
+      padding: 0.625rem 0.75rem;
+      font-size: 0.8125rem;
     }
 
     pre {
@@ -478,18 +514,18 @@
       padding: 1rem;
       margin-top: 1rem;
       font-family: 'SF Mono', Monaco, Consolas, monospace;
-      font-size: 0.8125rem;
+      font-size: 0.75rem;
       color: var(--text-secondary);
       white-space: pre-wrap;
       word-break: break-all;
-      max-height: 300px;
+      max-height: 200px;
       overflow-y: auto;
     }
 
     textarea#configText {
-      min-height: 260px;
+      min-height: 200px;
       font-family: 'SF Mono', Monaco, Consolas, monospace;
-      font-size: 0.8125rem;
+      font-size: 0.75rem;
       resize: vertical;
     }
 
@@ -546,7 +582,72 @@
       flex-wrap: wrap;
     }
 
+    /* Sidebar Card */
+    .sidebar-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+
+    .sidebar-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .sidebar-card-header:hover {
+      background: var(--bg-card-hover);
+    }
+
+    .sidebar-card-header h4 {
+      font-size: 0.875rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .sidebar-card-header .toggle-icon {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      transition: transform 0.3s ease;
+    }
+
+    .sidebar-card-header.open .toggle-icon {
+      transform: rotate(180deg);
+    }
+
+    .sidebar-card-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .sidebar-card-content.open {
+      max-height: 800px;
+    }
+
+    .sidebar-card-body {
+      padding: 0 1rem 1rem 1rem;
+      border-top: 1px solid var(--border-color);
+    }
+
     /* Responsive */
+    @media (max-width: 1024px) {
+      .page-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: static;
+      }
+    }
+
     @media (max-width: 640px) {
       .header {
         padding: 1rem;
@@ -565,7 +666,7 @@
         margin: 0;
       }
 
-      .main-container {
+      .page-layout {
         padding: 1rem;
       }
 
@@ -588,8 +689,8 @@
         alt="OpenClaw" />
     </div>
     <div class="status-badge">
-      <span class="status-dot" id="statusDot"></span>
-      <span id="status">Loading...</span>
+      <span class="status-dot loading" id="statusDot"></span>
+      <span id="status">Initializing engine...</span>
     </div>
   </header>
 
@@ -613,200 +714,245 @@
     </div>
   </div>
 
-  <!-- Main Content -->
-  <div class="main-container">
+  <!-- Page Layout: Main + Sidebar -->
+  <div class="page-layout">
 
-    <!-- Step 1: Core Engine -->
-    <div class="step-content active" data-step="1">
-      <div class="step-header">
-        <h1 class="step-title">Configure Core Engine</h1>
-        <p class="step-description">Select your AI provider and authentication method to power OpenClaw.</p>
-      </div>
+    <!-- Main Content (Wizard Steps) -->
+    <div class="main-content">
 
-      <div class="card">
-        <div class="card-title">
-          <span class="icon">🔑</span>
-          Model & Authentication
+      <!-- Step 1: Core Engine -->
+      <div class="step-content active" data-step="1">
+        <div class="step-header">
+          <h1 class="step-title">Configure Core Engine</h1>
+          <p class="step-description">Select your AI provider and authentication method to power OpenClaw.</p>
         </div>
 
-        <label for="authGroup">Provider Group</label>
-        <select id="authGroup"></select>
-        <div class="nudge">
-          <span class="nudge-icon">i</span>
-          <span>Choose your preferred AI provider. Each provider may have different pricing and capabilities.</span>
+        <div class="nudge"
+          style="margin-bottom: 1.5rem; background: rgba(255, 152, 0, 0.1); border-color: rgba(255, 152, 0, 0.3);">
+          <span class="nudge-icon" style="background: var(--accent-orange);">⏳</span>
+          <span><strong>Please wait</strong> for the status indicator (top-right) to show "Not Configured" or
+            "Configured" before selecting a model. The engine takes ~15-20 seconds to initialize on first load.</span>
         </div>
 
-        <label for="authChoice">Authentication Method</label>
-        <select id="authChoice"></select>
+        <div class="card">
+          <div class="card-title">
+            <span class="icon">🔑</span>
+            Model & Authentication
+          </div>
 
-        <label for="authSecret">API Key / Token</label>
-        <input id="authSecret" type="password" placeholder="Paste your API key or token here" />
-        <div class="nudge">
-          <span class="nudge-icon">!</span>
-          <span>Your API key is stored securely and never shared. Make sure to use a key with appropriate
-            permissions.</span>
+          <label for="authGroup">Provider Group</label>
+          <select id="authGroup"></select>
+          <div class="nudge">
+            <span class="nudge-icon">i</span>
+            <span>Choose your preferred AI provider. Each provider may have different pricing and capabilities.</span>
+          </div>
+
+          <label for="authChoice">Authentication Method</label>
+          <select id="authChoice"></select>
+
+          <label for="authSecret">API Key / Token</label>
+          <input id="authSecret" type="password" placeholder="Paste your API key or token here" />
+
+          <label for="flow">Setup Flow</label>
+          <select id="flow">
+            <option value="quickstart">Quickstart (Recommended)</option>
+            <option value="advanced">Advanced</option>
+            <option value="manual">Manual</option>
+          </select>
         </div>
 
-        <label for="flow">Setup Flow</label>
-        <select id="flow">
-          <option value="quickstart">Quickstart (Recommended)</option>
-          <option value="advanced">Advanced</option>
-          <option value="manual">Manual</option>
-        </select>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="nextToStep2">Continue to Messaging →</button>
+        </div>
       </div>
 
-      <div class="btn-group">
-        <button class="btn btn-primary" id="nextToStep2">Continue to Messaging →</button>
+      <!-- Step 2: Messaging (Optional) -->
+      <div class="step-content" data-step="2">
+        <div class="step-header">
+          <h1 class="step-title">Connect Messaging Channels</h1>
+          <p class="step-description">Optionally connect your messaging platforms. You can always add these later in
+            OpenClaw settings.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            <span class="icon">💬</span>
+            Telegram
+          </div>
+          <label for="telegramToken">Bot Token</label>
+          <input id="telegramToken" type="password" placeholder="123456:ABC..." />
+          <div class="nudge">
+            <span class="nudge-icon">→</span>
+            <span>Get it from <strong>@BotFather</strong> on Telegram: send <code>/newbot</code>, follow prompts, then
+              copy the token.</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            <span class="icon">🎮</span>
+            Discord
+          </div>
+          <label for="discordToken">Bot Token</label>
+          <input id="discordToken" type="password" placeholder="Bot token from Discord Developer Portal" />
+          <div class="nudge">
+            <span class="nudge-icon">⚠</span>
+            <span><strong>Important:</strong> Enable <strong>MESSAGE CONTENT INTENT</strong> in Bot → Privileged Gateway
+              Intents, or the bot will crash on startup.</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            <span class="icon">💼</span>
+            Slack
+          </div>
+          <label for="slackBotToken">Bot Token</label>
+          <input id="slackBotToken" type="password" placeholder="xoxb-..." />
+
+          <label for="slackAppToken">App Token</label>
+          <input id="slackAppToken" type="password" placeholder="xapp-..." />
+          <div class="nudge">
+            <span class="nudge-icon">i</span>
+            <span>Both tokens are required for Slack Socket Mode. Get them from your Slack app's OAuth & Permissions
+              page.</span>
+          </div>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-ghost" id="backToStep1">← Back</button>
+          <button class="btn btn-primary" id="nextToStep3">Continue to Deployment →</button>
+        </div>
       </div>
+
+      <!-- Step 3: Deployment -->
+      <div class="step-content" data-step="3">
+        <div class="step-header">
+          <h1 class="step-title">Deploy & Configure</h1>
+          <p class="step-description">Review your configuration and run the setup.</p>
+        </div>
+
+        <!-- Summary Box -->
+        <div class="summary-box" id="summaryBox">
+          <h4>📋 Configuration Summary</h4>
+          <div class="summary-item">
+            <span class="summary-label">Provider</span>
+            <span class="summary-value" id="summaryProvider">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Auth Method</span>
+            <span class="summary-value" id="summaryAuth">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">API Key</span>
+            <span class="summary-value" id="summaryKey">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Setup Flow</span>
+            <span class="summary-value" id="summaryFlow">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Telegram</span>
+            <span class="summary-value" id="summaryTelegram">Not configured</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Discord</span>
+            <span class="summary-value" id="summaryDiscord">Not configured</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Slack</span>
+            <span class="summary-value" id="summarySlack">Not configured</span>
+          </div>
+        </div>
+
+        <div class="card run-section">
+          <div class="card-title">
+            <span class="icon">🚀</span>
+            Run Setup
+          </div>
+          <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+            Click below to run the OpenClaw onboarding wizard with your configuration.
+          </p>
+          <div class="run-actions">
+            <button id="run" class="btn btn-primary">▶ Run Setup</button>
+            <button id="pairingApprove" class="btn btn-secondary">👥 Approve Pairing</button>
+            <button id="reset" class="btn btn-ghost" style="color: var(--accent-red);">🗑 Reset Setup</button>
+          </div>
+          <pre id="log" style="min-height: 60px;"></pre>
+          <div class="nudge" style="margin-top: 1rem;">
+            <span class="nudge-icon">⚠</span>
+            <span><strong>Reset</strong> deletes the config file to allow re-running onboarding. After resetting, you'll
+              need to go back to <strong>Step 1 (Core Engine)</strong> and reconfigure your model & authentication
+              settings. <strong>Approve Pairing</strong> grants DM access when dmPolicy=pairing.</span>
+          </div>
+        </div>
+
+        <div class="quick-actions">
+          <a href="/openclaw" target="_blank" class="quick-action-btn" id="openClawLink">🌐 Open OpenClaw UI</a>
+          <a href="/setup/export" target="_blank" class="quick-action-btn">📦 Download Backup (.tar.gz)</a>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-ghost" id="backToStep2">← Back to Messaging</button>
+        </div>
+      </div>
+
     </div>
 
-    <!-- Step 2: Messaging (Optional) -->
-    <div class="step-content" data-step="2">
-      <div class="step-header">
-        <h1 class="step-title">Connect Messaging Channels</h1>
-        <p class="step-description">Optionally connect your messaging platforms. You can always add these later in
-          OpenClaw settings.</p>
-      </div>
+    <!-- Sidebar: Advanced Tools -->
+    <aside class="sidebar">
+      <div class="sidebar-title">Advanced Tools</div>
 
-      <div class="card">
-        <div class="card-title">
-          <span class="icon">💬</span>
-          Telegram
-        </div>
-        <label for="telegramToken">Bot Token</label>
-        <input id="telegramToken" type="password" placeholder="123456:ABC..." />
-        <div class="nudge">
-          <span class="nudge-icon">→</span>
-          <span>Get it from <strong>@BotFather</strong> on Telegram: send <code>/newbot</code>, follow prompts, then
-            copy the token.</span>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">
-          <span class="icon">🎮</span>
-          Discord
-        </div>
-        <label for="discordToken">Bot Token</label>
-        <input id="discordToken" type="password" placeholder="Bot token from Discord Developer Portal" />
-        <div class="nudge">
-          <span class="nudge-icon">⚠</span>
-          <span><strong>Important:</strong> Enable <strong>MESSAGE CONTENT INTENT</strong> in Bot → Privileged Gateway
-            Intents, or the bot will crash on startup.</span>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">
-          <span class="icon">💼</span>
-          Slack
-        </div>
-        <label for="slackBotToken">Bot Token</label>
-        <input id="slackBotToken" type="password" placeholder="xoxb-..." />
-
-        <label for="slackAppToken">App Token</label>
-        <input id="slackAppToken" type="password" placeholder="xapp-..." />
-        <div class="nudge">
-          <span class="nudge-icon">i</span>
-          <span>Both tokens are required for Slack Socket Mode. Get them from your Slack app's OAuth & Permissions
-            page.</span>
-        </div>
-      </div>
-
-      <div class="btn-group">
-        <button class="btn btn-ghost" id="backToStep1">← Back</button>
-        <button class="btn btn-primary" id="nextToStep3">Continue to Deployment →</button>
-      </div>
-    </div>
-
-    <!-- Step 3: Deployment -->
-    <div class="step-content" data-step="3">
-      <div class="step-header">
-        <h1 class="step-title">Deploy & Configure</h1>
-        <p class="step-description">Run the setup and access advanced configuration options.</p>
-      </div>
-
-      <div class="card run-section">
-        <div class="card-title">
-          <span class="icon">🚀</span>
-          Run Setup
-        </div>
-        <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
-          Click below to run the OpenClaw onboarding wizard with your configuration.
-        </p>
-        <div class="run-actions">
-          <button id="run" class="btn btn-primary">▶ Run Setup</button>
-          <button id="pairingApprove" class="btn btn-secondary">👥 Approve Pairing</button>
-          <button id="reset" class="btn btn-ghost" style="color: var(--accent-red);">🗑 Reset Setup</button>
-        </div>
-        <pre id="log" style="min-height: 60px;"></pre>
-        <div class="nudge" style="margin-top: 1rem;">
-          <span class="nudge-icon">⚠</span>
-          <span><strong>Reset</strong> deletes the config file to allow re-running onboarding. After resetting, you'll
-            need to go back to <strong>Step 1 (Core Engine)</strong> and reconfigure your model & authentication
-            settings. <strong>Approve Pairing</strong> grants DM access when dmPolicy=pairing.</span>
-        </div>
-      </div>
-
-      <div class="quick-actions">
-        <a href="/openclaw" target="_blank" class="quick-action-btn">🌐 Open OpenClaw UI</a>
-        <a href="/setup/export" target="_blank" class="quick-action-btn">📦 Download Backup (.tar.gz)</a>
-      </div>
-
-      <!-- Debug Console Toggle -->
-      <div class="toggle-card" id="toggleConsole">
-        <div class="toggle-card-content">
+      <!-- Debug Console -->
+      <div class="sidebar-card">
+        <div class="sidebar-card-header" id="toggleConsole">
           <h4>🛠 Debug Console</h4>
-          <p>Run safe diagnostic commands for debugging and recovery.</p>
+          <span class="toggle-icon">▼</span>
         </div>
-        <span class="toggle-icon">▼</span>
-      </div>
-      <div class="collapsible-content" id="consoleSection">
-        <div class="card" style="margin-top: 0; border-top-left-radius: 0; border-top-right-radius: 0;">
-          <div class="console-bar">
-            <select id="consoleCmd">
-              <option value="gateway.restart">gateway.restart (wrapper-managed)</option>
-              <option value="gateway.stop">gateway.stop (wrapper-managed)</option>
-              <option value="gateway.start">gateway.start (wrapper-managed)</option>
-              <option value="openclaw.status">openclaw status</option>
-              <option value="openclaw.health">openclaw health</option>
-              <option value="openclaw.doctor">openclaw doctor</option>
-              <option value="openclaw.logs">openclaw logs</option>
-              <option value="openclaw.config.get">openclaw config get &lt;path&gt;</option>
-              <option value="openclaw.version">openclaw --version</option>
-            </select>
-            <input id="consoleArg" placeholder="Optional arg (e.g. 200, gateway.port)" />
-            <button id="consoleRun" class="btn btn-secondary">Run</button>
+        <div class="sidebar-card-content" id="consoleSection">
+          <div class="sidebar-card-body">
+            <div class="console-bar" style="margin-top: 0.75rem;">
+              <select id="consoleCmd">
+                <option value="gateway.restart">gateway.restart</option>
+                <option value="gateway.stop">gateway.stop</option>
+                <option value="gateway.start">gateway.start</option>
+                <option value="openclaw.status">openclaw status</option>
+                <option value="openclaw.health">openclaw health</option>
+                <option value="openclaw.doctor">openclaw doctor</option>
+                <option value="openclaw.logs">openclaw logs</option>
+                <option value="openclaw.config.get">config get &lt;path&gt;</option>
+                <option value="openclaw.version">openclaw --version</option>
+              </select>
+              <input id="consoleArg" placeholder="Arg (optional)" />
+            </div>
+            <button id="consoleRun" class="btn btn-secondary btn-sm"
+              style="width: 100%; margin-top: 0.5rem;">Run</button>
+            <pre id="consoleOut" style="max-height: 150px;"></pre>
           </div>
-          <pre id="consoleOut"></pre>
         </div>
       </div>
 
-      <!-- Config Editor Toggle -->
-      <div class="toggle-card" id="toggleConfig" style="margin-top: 0.5rem;">
-        <div class="toggle-card-content">
-          <h4>⚙️ Config Editor (Advanced)</h4>
-          <p>Edit the full config file on disk (JSON5). Saving creates a timestamped backup.</p>
+      <!-- Config Editor -->
+      <div class="sidebar-card">
+        <div class="sidebar-card-header" id="toggleConfig">
+          <h4>⚙️ Config Editor</h4>
+          <span class="toggle-icon">▼</span>
         </div>
-        <span class="toggle-icon">▼</span>
-      </div>
-      <div class="collapsible-content" id="configSection">
-        <div class="card" style="margin-top: 0; border-top-left-radius: 0; border-top-right-radius: 0;">
-          <div class="muted" id="configPath"
-            style="font-size: 0.8125rem; color: var(--text-muted); margin-bottom: 0.75rem;"></div>
-          <textarea id="configText" placeholder="Config file content will appear here..."></textarea>
-          <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem;">
-            <button id="configReload" class="btn btn-secondary">🔄 Reload</button>
-            <button id="configSave" class="btn btn-primary">💾 Save</button>
+        <div class="sidebar-card-content" id="configSection">
+          <div class="sidebar-card-body">
+            <div class="muted" id="configPath"
+              style="font-size: 0.75rem; color: var(--text-muted); margin: 0.75rem 0 0.5rem 0;"></div>
+            <textarea id="configText" placeholder="Config file content will appear here..."></textarea>
+            <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem;">
+              <button id="configReload" class="btn btn-secondary btn-sm" style="flex: 1;">🔄 Reload</button>
+              <button id="configSave" class="btn btn-primary btn-sm" style="flex: 1;">💾 Save</button>
+            </div>
+            <pre id="configOut" style="max-height: 100px;"></pre>
           </div>
-          <pre id="configOut"></pre>
         </div>
       </div>
 
-      <div class="btn-group">
-        <button class="btn btn-ghost" id="backToStep2">← Back to Messaging</button>
-      </div>
-    </div>
+    </aside>
 
   </div>
 

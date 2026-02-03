@@ -12,7 +12,7 @@
   var backToStep1 = document.getElementById('backToStep1');
   var backToStep2 = document.getElementById('backToStep2');
 
-  // Toggles
+  // Sidebar Toggles
   var toggleConsole = document.getElementById('toggleConsole');
   var consoleSection = document.getElementById('consoleSection');
   var toggleConfig = document.getElementById('toggleConfig');
@@ -24,6 +24,18 @@
   var authGroupEl = document.getElementById('authGroup');
   var authChoiceEl = document.getElementById('authChoice');
   var logEl = document.getElementById('log');
+
+  // Summary Elements
+  var summaryProvider = document.getElementById('summaryProvider');
+  var summaryAuth = document.getElementById('summaryAuth');
+  var summaryKey = document.getElementById('summaryKey');
+  var summaryFlow = document.getElementById('summaryFlow');
+  var summaryTelegram = document.getElementById('summaryTelegram');
+  var summaryDiscord = document.getElementById('summaryDiscord');
+  var summarySlack = document.getElementById('summarySlack');
+
+  // OpenClaw UI Link
+  var openClawLink = document.getElementById('openClawLink');
 
   // Debug console
   var consoleCmdEl = document.getElementById('consoleCmd');
@@ -37,6 +49,89 @@
   var configReloadEl = document.getElementById('configReload');
   var configSaveEl = document.getElementById('configSave');
   var configOutEl = document.getElementById('configOut');
+
+  // Store gateway token
+  var gatewayToken = null;
+
+  // Auth groups data
+  var authGroups = [];
+
+  // Update Summary Box
+  function updateSummary() {
+    // Provider
+    if (summaryProvider && authGroupEl) {
+      var selectedGroup = authGroupEl.options[authGroupEl.selectedIndex];
+      summaryProvider.textContent = selectedGroup ? selectedGroup.textContent.split(' - ')[0] : '—';
+    }
+
+    // Auth Method
+    if (summaryAuth && authChoiceEl) {
+      var selectedAuth = authChoiceEl.options[authChoiceEl.selectedIndex];
+      summaryAuth.textContent = selectedAuth ? selectedAuth.textContent : '—';
+    }
+
+    // API Key (masked)
+    if (summaryKey) {
+      var keyEl = document.getElementById('authSecret');
+      if (keyEl && keyEl.value.trim()) {
+        var keyVal = keyEl.value.trim();
+        summaryKey.textContent = keyVal.substring(0, 8) + '••••••••';
+        summaryKey.classList.remove('disabled');
+      } else {
+        summaryKey.textContent = 'Not provided';
+        summaryKey.classList.add('disabled');
+      }
+    }
+
+    // Setup Flow
+    if (summaryFlow) {
+      var flowEl = document.getElementById('flow');
+      summaryFlow.textContent = flowEl ? flowEl.options[flowEl.selectedIndex].textContent : '—';
+    }
+
+    // Telegram
+    if (summaryTelegram) {
+      var telegramEl = document.getElementById('telegramToken');
+      if (telegramEl && telegramEl.value.trim()) {
+        summaryTelegram.textContent = 'Configured';
+        summaryTelegram.classList.add('enabled');
+        summaryTelegram.classList.remove('disabled');
+      } else {
+        summaryTelegram.textContent = 'Not configured';
+        summaryTelegram.classList.add('disabled');
+        summaryTelegram.classList.remove('enabled');
+      }
+    }
+
+    // Discord
+    if (summaryDiscord) {
+      var discordEl = document.getElementById('discordToken');
+      if (discordEl && discordEl.value.trim()) {
+        summaryDiscord.textContent = 'Configured';
+        summaryDiscord.classList.add('enabled');
+        summaryDiscord.classList.remove('disabled');
+      } else {
+        summaryDiscord.textContent = 'Not configured';
+        summaryDiscord.classList.add('disabled');
+        summaryDiscord.classList.remove('enabled');
+      }
+    }
+
+    // Slack
+    if (summarySlack) {
+      var slackBotEl = document.getElementById('slackBotToken');
+      var slackAppEl = document.getElementById('slackAppToken');
+      if ((slackBotEl && slackBotEl.value.trim()) || (slackAppEl && slackAppEl.value.trim())) {
+        summarySlack.textContent = 'Configured';
+        summarySlack.classList.add('enabled');
+        summarySlack.classList.remove('disabled');
+      } else {
+        summarySlack.textContent = 'Not configured';
+        summarySlack.classList.add('disabled');
+        summarySlack.classList.remove('enabled');
+      }
+    }
+  }
 
   // Step Navigation Functions
   function goToStep(stepNumber) {
@@ -72,6 +167,11 @@
         content.classList.remove('active');
       }
     });
+
+    // Update summary when entering Step 3
+    if (stepNumber === 3) {
+      updateSummary();
+    }
 
     // Scroll to top of main container
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -110,7 +210,7 @@
     });
   }
 
-  // Toggle functions
+  // Toggle functions for sidebar
   function setupToggle(toggleEl, sectionEl) {
     if (toggleEl && sectionEl) {
       toggleEl.addEventListener('click', function () {
@@ -124,18 +224,20 @@
   setupToggle(toggleConfig, configSection);
 
   // Status Functions
-  function setStatus(s, isConfigured) {
+  function setStatus(s, isConfigured, isLoading) {
     if (statusEl) statusEl.textContent = s;
     if (statusDot) {
-      if (isConfigured) {
+      statusDot.classList.remove('configured', 'loading');
+      if (isLoading) {
+        statusDot.classList.add('loading');
+      } else if (isConfigured) {
         statusDot.classList.add('configured');
-      } else {
-        statusDot.classList.remove('configured');
       }
     }
   }
 
   function renderAuth(groups) {
+    authGroups = groups;
     if (!authGroupEl) return;
 
     authGroupEl.innerHTML = '';
@@ -181,14 +283,27 @@
     });
   }
 
+  function updateOpenClawLink() {
+    if (openClawLink && gatewayToken) {
+      openClawLink.href = '/openclaw?token=' + encodeURIComponent(gatewayToken);
+    }
+  }
+
   function refreshStatus() {
-    setStatus('Loading...', false);
+    setStatus('Initializing engine...', false, true);
     return httpJson('/setup/api/status').then(function (j) {
       var ver = j.openclawVersion ? (' | ' + j.openclawVersion) : '';
       var isConfigured = j.configured;
       var statusText = isConfigured ? 'Configured' : 'Not configured';
-      setStatus(statusText + ver, isConfigured);
+      setStatus(statusText + ver, isConfigured, false);
       renderAuth(j.authGroups || []);
+
+      // Store gateway token and update link
+      if (j.gatewayToken) {
+        gatewayToken = j.gatewayToken;
+        updateOpenClawLink();
+      }
+
       if (j.channelsAddHelp && j.channelsAddHelp.indexOf('telegram') === -1) {
         if (logEl) logEl.textContent += '\nNote: this openclaw build does not list telegram in `channels add --help`. Telegram auto-add will be skipped.\n';
       }
@@ -199,7 +314,7 @@
       }
 
     }).catch(function (e) {
-      setStatus('Error: ' + String(e), false);
+      setStatus('Error: ' + String(e), false, false);
     });
   }
 
@@ -306,7 +421,7 @@
     if (configOutEl) configOutEl.textContent = '';
     return httpJson('/setup/api/config/raw').then(function (j) {
       if (configPathEl) {
-        configPathEl.textContent = 'Config file: ' + (j.path || '(unknown)') + (j.exists ? '' : ' (does not exist yet)');
+        configPathEl.textContent = 'Config: ' + (j.path || '(unknown)') + (j.exists ? '' : ' (does not exist yet)');
       }
       configTextEl.value = j.content || '';
     }).catch(function (e) {
@@ -334,5 +449,3 @@
   if (configSaveEl) configSaveEl.onclick = saveConfigRaw;
 
 })();
-
-// update later
