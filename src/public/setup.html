@@ -1,0 +1,985 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>🦞 OpenClaw — Setup Wizard</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style type="text/tailwindcss">
+    @theme {
+      --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+      --color-surface: #09090b;
+      --color-surface-raised: rgba(255, 255, 255, 0.03);
+      --color-surface-overlay: rgba(255, 255, 255, 0.06);
+      --color-border: rgba(255, 255, 255, 0.07);
+      --color-border-muted: rgba(255, 255, 255, 0.04);
+      --color-accent: #e63946;
+      --color-accent-hover: #f04d5a;
+      --color-text-primary: #fafafa;
+      --color-text-secondary: #a1a1aa;
+      --color-text-muted: #52525b;
+      --color-success: #22c55e;
+      --color-warning: #eab308;
+      --color-danger: #ef4444;
+    }
+    [x-cloak] { display: none !important; }
+
+    body { background: var(--color-surface); }
+
+    /* Subtle top-edge accent line */
+    body::before {
+      content: ''; position: fixed; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(230,57,70,0.3), transparent);
+      z-index: 100; pointer-events: none;
+    }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+
+    .step-num {
+      width: 22px; height: 22px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 600; flex-shrink: 0;
+      background: rgba(230, 57, 70, 0.08); color: var(--color-accent);
+      border: 1px solid rgba(230, 57, 70, 0.15);
+    }
+
+    .card {
+      background: var(--color-surface-raised);
+      border: 1px solid var(--color-border-muted);
+      border-radius: 14px; padding: 24px;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+      position: relative; z-index: 1;
+    }
+    .card:hover {
+      border-color: rgba(255, 255, 255, 0.1);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+    }
+
+    .input-field {
+      width: 100%; padding: 11px 14px; font-size: 14px; font-family: inherit;
+      background: rgba(0, 0, 0, 0.3); color: var(--color-text-primary);
+      border: 1px solid var(--color-border); border-radius: 8px;
+      outline: none; transition: all 0.2s ease;
+    }
+    .input-field::placeholder { color: var(--color-text-muted); }
+    .input-field:focus {
+      border-color: var(--color-accent);
+      box-shadow: 0 0 0 2px rgba(230, 57, 70, 0.1);
+    }
+    select.input-field {
+      appearance: none; cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2752525b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 12px center; background-size: 14px; padding-right: 36px;
+    }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 500;
+      cursor: pointer; border: none; font-family: inherit;
+      transition: all 0.2s ease;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary {
+      background: var(--color-accent); color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: var(--color-accent-hover);
+    }
+    .btn-secondary {
+      background: var(--color-surface-overlay); color: var(--color-text-primary);
+      border: 1px solid var(--color-border);
+    }
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.12);
+    }
+    .btn-danger {
+      background: transparent; color: var(--color-danger);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .btn-danger:hover:not(:disabled) {
+      background: var(--color-danger); color: #fff;
+    }
+    .btn-success {
+      background: #16a34a; color: #fff;
+    }
+    .btn-success:hover:not(:disabled) {
+      background: #15803d;
+    }
+
+    .section-number {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--color-accent);
+      color: #fff; display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; flex-shrink: 0;
+    }
+
+    .log-box {
+      background: rgba(0, 0, 0, 0.35); border: 1px solid var(--color-border-muted);
+      border-radius: 8px; padding: 14px;
+      font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
+      font-size: 12px; color: var(--color-text-secondary); white-space: pre-wrap;
+      max-height: 400px; overflow-y: auto;
+    }
+
+    .info-tooltip {
+      position: relative; display: inline-flex; align-items: center; justify-content: center;
+      width: 15px; height: 15px; border-radius: 50%;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      color: var(--color-text-muted); font-size: 9px; font-weight: 700;
+      cursor: help; flex-shrink: 0;
+    }
+    .info-tooltip:hover { background: rgba(255,255,255,0.1); }
+    .info-tooltip:hover .info-tooltip-content { display: block; }
+    .info-tooltip-content {
+      display: none; position: absolute; left: 22px; top: -8px; width: 230px;
+      background: #18181b; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+      padding: 10px 12px; font-size: 12px; font-weight: 400;
+      color: var(--color-text-secondary); line-height: 1.5; z-index: 50;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+  </style>
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('setupApp', () => ({
+        step: 1,
+        totalSteps: 3,
+        status: 'Loading...',
+        configured: false,
+        openclawVersion: '',
+        authGroups: [],
+        selectedGroup: '',
+        authChoices: [],
+        selectedAuth: '',
+        authSecret: '',
+        telegramToken: '',
+        discordToken: '',
+        slackBotToken: '',
+        slackAppToken: '',
+        model: '',
+        log: '',
+        loading: false,
+        pairingChannel: '',
+        pairingCode: '',
+        showPairingModal: false,
+        isReady: false,
+        tuiEnabled: false,
+        exporting: false,
+        showExportInfo: false,
+        showDevicesModal: false,
+        devicesLoading: false,
+        devices: [],
+        devicesPending: [],
+        devicesPaired: [],
+
+        get currentGroup() {
+          return this.authGroups.find(g => g.value === this.selectedGroup);
+        },
+
+        async init() {
+          await this.refreshStatus();
+        },
+
+        async httpJson(url, opts = {}) {
+          opts.credentials = 'same-origin';
+          const res = await fetch(url, opts);
+          if (!res.ok) {
+            const t = await res.text();
+            throw new Error('HTTP ' + res.status + ': ' + (t || res.statusText));
+          }
+          return res.json();
+        },
+
+        async refreshStatus() {
+          this.status = 'Loading...';
+          try {
+            const j = await this.httpJson('/setup/api/status');
+            this.configured = j.configured;
+            this.openclawVersion = j.openclawVersion || '';
+            this.tuiEnabled = j.tuiEnabled || false;
+            this.status = j.configured ? 'Configured - open /openclaw' : 'Not configured - run setup below';
+            this.authGroups = j.authGroups || [];
+            if (this.authGroups.length > 0) {
+              this.selectedGroup = this.authGroups[0].value;
+              this.updateAuthChoices();
+            }
+            if (j.channelsAddHelp && j.channelsAddHelp.indexOf('telegram') === -1) {
+              this.log += '\nNote: this openclaw build does not list telegram in `channels add --help`. Telegram auto-add will be skipped.\n';
+            }
+            this.isReady = true;
+          } catch (e) {
+            this.status = 'Error: ' + String(e);
+            this.isReady = true;
+          }
+        },
+
+        updateAuthChoices() {
+          const group = this.currentGroup;
+          this.authChoices = (group && group.options) ? group.options : [];
+          if (this.authChoices.length > 0) {
+            this.selectedAuth = this.authChoices[0].value;
+          }
+        },
+
+        nextStep() {
+          if (this.step < this.totalSteps) this.step++;
+        },
+
+        prevStep() {
+          if (this.step > 1) this.step--;
+        },
+
+        async runSetup() {
+          const payload = {
+            authChoice: this.selectedAuth,
+            authSecret: this.authSecret,
+            model: this.model,
+            telegramToken: this.telegramToken,
+            discordToken: this.discordToken,
+            slackBotToken: this.slackBotToken,
+            slackAppToken: this.slackAppToken
+          };
+
+          this.log = 'Running...\n';
+          this.loading = true;
+
+          try {
+            const res = await fetch('/setup/api/run', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            const text = await res.text();
+            let j;
+            try { j = JSON.parse(text); } catch (_e) { j = { ok: false, output: text }; }
+            this.log += (j.output || JSON.stringify(j, null, 2));
+            await this.refreshStatus();
+          } catch (e) {
+            this.log += '\nError: ' + String(e) + '\n';
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        openPairingModal() {
+          this.pairingChannel = '';
+          this.pairingCode = '';
+          this.showPairingModal = true;
+        },
+
+        async approvePairing() {
+          const channel = this.pairingChannel.trim().toLowerCase();
+          if (channel !== 'telegram' && channel !== 'discord') {
+            alert('Channel must be "telegram" or "discord"');
+            return;
+          }
+          const code = this.pairingCode.trim();
+          if (!code) {
+            alert('Please enter a pairing code');
+            return;
+          }
+          this.showPairingModal = false;
+          this.log += '\nApproving pairing for ' + channel + '...\n';
+
+          try {
+            const res = await fetch('/setup/api/pairing/approve', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ channel: channel, code: code })
+            });
+            const t = await res.text();
+            let result;
+            try { result = JSON.parse(t); } catch (_e) { result = { ok: false, output: t }; }
+            if (result.ok) {
+              const msg = result.output || 'Pairing approved successfully';
+              this.log += '✓ ' + msg + '\n';
+              alert('✓ ' + msg.trim());
+            } else {
+              const msg = result.output || result.error || 'Unknown error';
+              this.log += '✗ Failed: ' + msg + '\n';
+              alert('✗ Pairing failed: ' + msg.trim());
+            }
+          } catch (e) {
+            this.log += '✗ Error: ' + String(e) + '\n';
+            alert('✗ Pairing failed: ' + String(e));
+          }
+        },
+
+        async resetSetup() {
+          if (!confirm('Reset setup? This deletes the config file so onboarding can run again.')) return;
+          this.log = 'Resetting...\n';
+          this.loading = true;
+
+          try {
+            const res = await fetch('/setup/api/reset', { method: 'POST', credentials: 'same-origin' });
+            const t = await res.text();
+            this.log += t + '\n';
+            await this.refreshStatus();
+          } catch (e) {
+            this.log += 'Error: ' + String(e) + '\n';
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async runDoctor() {
+          this.log = 'Running doctor...\n';
+          this.loading = true;
+
+          try {
+            const res = await fetch('/setup/api/doctor', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'content-type': 'application/json' }
+            });
+            const text = await res.text();
+            let j;
+            try { j = JSON.parse(text); } catch (_e) { j = { ok: false, output: text }; }
+            this.log += (j.output || JSON.stringify(j, null, 2));
+            if (j.ok) {
+              this.log += '\n✓ Doctor completed successfully\n';
+            } else {
+              this.log += '\n✗ Doctor found issues\n';
+            }
+          } catch (e) {
+            this.log += 'Error: ' + String(e) + '\n';
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async exportData() {
+          this.exporting = true;
+          this.log = 'Preparing export...\n';
+
+          try {
+            const res = await fetch('/setup/api/export', { credentials: 'same-origin' });
+            if (!res.ok) {
+              const text = await res.text();
+              let j;
+              try { j = JSON.parse(text); } catch (_e) { j = { error: text }; }
+              this.log += '✗ Export failed: ' + (j.error || j.output || text) + '\n';
+              return;
+            }
+
+            const disposition = res.headers.get('content-disposition') || '';
+            const match = disposition.match(/filename="?([^"]+)"?/);
+            const filename = match ? match[1] : 'openclaw-export.zip';
+
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+
+            this.log += '✓ Export downloaded: ' + filename + '\n';
+            this.showExportInfo = true;
+          } catch (e) {
+            this.log += '✗ Export error: ' + String(e) + '\n';
+          } finally {
+            this.exporting = false;
+          }
+        },
+
+        async openDevicesModal() {
+          this.showDevicesModal = true;
+          await this.loadDevices();
+        },
+
+        async loadDevices() {
+          this.devicesLoading = true;
+          try {
+            const j = await this.httpJson('/setup/api/devices');
+            const d = j.data;
+            if (d) {
+              if (Array.isArray(d)) {
+                this.devicesPending = d.filter(x => x.status === 'pending');
+                this.devicesPaired = d.filter(x => x.status !== 'pending');
+              } else {
+                this.devicesPending = d.pending || d.pendingRequests || d.requests || [];
+                this.devicesPaired = d.devices || d.paired || d.approved || [];
+              }
+            } else {
+              this.devicesPending = [];
+              this.devicesPaired = [];
+            }
+            if (j.raw) {
+              this.log += '[devices] ' + j.raw.trim() + '\n';
+            }
+          } catch (e) {
+            this.log += '✗ Failed to load devices: ' + String(e) + '\n';
+          } finally {
+            this.devicesLoading = false;
+          }
+        },
+
+        async approveDevice(requestId) {
+          this.devicesLoading = true;
+          try {
+            const body = requestId ? { requestId } : {};
+            const res = await fetch('/setup/api/devices/approve', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(body)
+            });
+            const j = await res.json();
+            if (j.ok) {
+              this.log += '✓ Device approved\n';
+            } else {
+              this.log += '✗ Approve failed: ' + (j.output || j.error || 'Unknown error') + '\n';
+            }
+            await this.loadDevices();
+          } catch (e) {
+            this.log += '✗ Error: ' + String(e) + '\n';
+            this.devicesLoading = false;
+          }
+        },
+
+        async rejectDevice(requestId) {
+          this.devicesLoading = true;
+          try {
+            const res = await fetch('/setup/api/devices/reject', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ requestId })
+            });
+            const j = await res.json();
+            if (j.ok) {
+              this.log += '✓ Device rejected\n';
+            } else {
+              this.log += '✗ Reject failed: ' + (j.output || j.error || 'Unknown error') + '\n';
+            }
+            await this.loadDevices();
+          } catch (e) {
+            this.log += '✗ Error: ' + String(e) + '\n';
+            this.devicesLoading = false;
+          }
+        }
+      }));
+    });
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+</head>
+
+<body class="text-[var(--color-text-primary)] min-h-screen font-sans" x-data="setupApp()">
+
+  <!-- TOP BAR -->
+  <header
+    class="fixed top-0 left-0 right-0 z-30 bg-[var(--color-surface)]/95 backdrop-blur-md border-b border-[var(--color-border-muted)] flex justify-center">
+    <div class="w-full px-8 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="https://res.cloudinary.com/asset-cloudinary/image/upload/v1769907898/openclaw-logo-text_w3qcgl.avif"
+          alt="OpenClaw" class="h-6">
+        <span class="text-[11px] text-[var(--color-text-muted)] font-medium tracking-wide">Configuration</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span x-show="configured"
+          class="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-[var(--color-success)]/10 text-[var(--color-success)] border border-[var(--color-success)]/20">
+          <span class="w-1.5 h-1.5 rounded-full bg-[var(--color-success)]"></span> Ready
+        </span>
+        <span x-show="!configured && isReady"
+          class="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-[var(--color-warning)]/10 text-[var(--color-warning)] border border-[var(--color-warning)]/20">
+          <span class="w-1.5 h-1.5 rounded-full bg-[var(--color-warning)]" style="animation: pulse 2s infinite;"></span>
+          Pending setup
+        </span>
+        <a x-show="tuiEnabled && configured" href="/tui" target="_blank"
+          class="btn btn-secondary text-xs !py-1 !px-2.5">Terminal</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="pt-[48px] min-h-screen">
+    <div class="flex">
+
+      <!-- LEFT SIDEBAR -->
+      <aside class="hidden lg:block w-[260px] shrink-0 border-r border-[var(--color-border-muted)] min-h-screen">
+        <div class="sticky top-[48px] p-5 pt-8">
+          <p class="text-[9px] uppercase tracking-[0.15em] text-[var(--color-text-muted)] font-semibold mb-5">Quick
+            guide</p>
+          <ol class="space-y-3.5">
+            <li class="flex items-start gap-2.5">
+              <span class="step-num">1</span>
+              <p class="text-[12px] text-[var(--color-text-secondary)] leading-relaxed">Pick your <strong
+                  class="text-[var(--color-text-primary)]">AI provider</strong> and enter credentials</p>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="step-num">2</span>
+              <p class="text-[12px] text-[var(--color-text-secondary)] leading-relaxed">Link <strong
+                  class="text-[var(--color-text-primary)]">messaging platforms</strong> (skip if not needed)</p>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="step-num">3</span>
+              <p class="text-[12px] text-[var(--color-text-primary)] leading-relaxed">Review and <strong>deploy</strong>
+              </p>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="step-num">4</span>
+              <div class="relative">
+                <span class="text-[12px] text-[var(--color-text-secondary)] leading-relaxed">Authorize channel bots via
+                  <strong class="text-[var(--color-text-primary)]">Approve Pairing</strong></span>
+                <div class="info-tooltip inline-flex ml-1 relative mt-[1px]">i
+                  <div class="info-tooltip-content" style="top: -10px; left: 22px; width: 240px;">Send any message to
+                    your bot on Telegram or Discord. It responds with a pairing code — enter that code here to grant
+                    access.</div>
+                </div>
+              </div>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="step-num">5</span>
+              <p class="text-[12px] text-[var(--color-text-primary)] leading-relaxed">Launch the <strong>OpenClaw
+                  dashboard</strong></p>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="step-num">6</span>
+              <div class="relative">
+                <span class="text-[12px] text-[var(--color-text-secondary)] leading-relaxed">New browser? Go to <strong
+                    class="text-[var(--color-text-primary)]">Manage Devices</strong> and approve it</span>
+                <div class="info-tooltip inline-flex ml-1 relative mt-[1px]">i
+                  <div class="info-tooltip-content" style="top: -20px; left: 22px; width: 240px;">Each new browser
+                    requires a one-time device approval. Open the dashboard first, then come back and approve the
+                    pending request.</div>
+                </div>
+              </div>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="step-num">7</span>
+              <p class="text-[12px] text-[var(--color-text-secondary)] leading-relaxed">Verify <strong
+                  class="text-[var(--color-text-primary)]">Health: OK</strong> in the dashboard</p>
+            </li>
+          </ol>
+
+          <div class="mt-6 text-[10px] text-[var(--color-text-muted)]">
+            <span x-show="openclawVersion" x-text="'v' + openclawVersion"></span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- MAIN CONTENT -->
+      <main class="flex-1 min-w-0">
+        <div class="max-w-2xl mx-auto px-8 py-8 space-y-6">
+
+          <!-- ===================== PRE-SETUP VIEW ===================== -->
+          <template x-if="isReady && !configured">
+            <div class="space-y-6">
+
+              <!-- SECTION 1: AI Provider -->
+              <section class="card">
+                <div class="flex items-center gap-3 mb-5">
+                  <span class="section-number">1</span>
+                  <h2 class="text-base font-semibold">AI Provider</h2>
+                </div>
+                <div class="space-y-4">
+                  <div>
+                    <label
+                      class="block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-1.5">Service</label>
+                    <select x-model="selectedGroup" @change="updateAuthChoices()" class="input-field">
+                      <template x-for="g in authGroups" :key="g.value">
+                        <option :value="g.value" x-text="g.label + (g.hint ? ' — ' + g.hint : '')"></option>
+                      </template>
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      class="block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-1.5">Authentication</label>
+                    <select x-model="selectedAuth" class="input-field">
+                      <template x-for="o in authChoices" :key="o.value">
+                        <option :value="o.value" x-text="o.label + (o.hint ? ' — ' + o.hint : '')"></option>
+                      </template>
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      class="block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-1.5">Secret
+                      Key</label>
+                    <input x-model="authSecret" type="password" placeholder="Enter your API key or access token"
+                      class="input-field" />
+                  </div>
+                  <div>
+                    <label
+                      class="block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-1.5">Model</label>
+                    <input x-model="model" type="text" placeholder="e.g. openai/gpt-4.1, anthropic/claude-sonnet-4"
+                      class="input-field" />
+                    <p class="text-[11px] text-[var(--color-text-muted)] mt-1">Use the format provider/model-name</p>
+                  </div>
+                </div>
+              </section>
+
+              <!-- SECTION 2: Integrations -->
+              <section class="card">
+                <div class="flex items-center gap-3 mb-2">
+                  <span class="section-number">2</span>
+                  <h2 class="text-base font-semibold">Integrations</h2>
+                  <span
+                    class="text-[9px] uppercase tracking-wide font-semibold text-[var(--color-text-muted)] bg-[var(--color-surface-overlay)] px-1.5 py-0.5 rounded">Optional</span>
+                </div>
+                <p class="text-[13px] text-[var(--color-text-secondary)] mb-5 ml-10">Hook up messaging services. This
+                  can also be configured later from the dashboard.</p>
+                <div class="space-y-4">
+                  <div>
+                    <label
+                      class="block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-1.5">Telegram
+                      Token</label>
+                    <input x-model="telegramToken" type="password" placeholder="Bot token from @BotFather"
+                      class="input-field" />
+                    <p class="text-[11px] text-[var(--color-text-muted)] mt-1">Create via <a
+                        href="https://t.me/BotFather" target="_blank"
+                        class="text-[var(--color-accent)] hover:underline">@BotFather</a> → <code
+                        class="text-[11px] bg-[var(--color-surface-overlay)] px-1 py-0.5 rounded">/newbot</code></p>
+                  </div>
+                  <div>
+                    <label
+                      class="block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-1.5">Discord
+                      Token</label>
+                    <input x-model="discordToken" type="password" placeholder="Bot token from Developer Portal"
+                      class="input-field" />
+                    <p class="text-[11px] text-[var(--color-text-muted)] mt-1">Make sure <strong
+                        class="text-[var(--color-warning)]">MESSAGE CONTENT INTENT</strong> is enabled under Privileged
+                      Gateway Intents</p>
+                  </div>
+                  <div>
+                    <label
+                      class="block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-1.5">Slack
+                      Bot Token</label>
+                    <input x-model="slackBotToken" type="password" placeholder="xoxb-..." class="input-field" />
+                  </div>
+                  <div>
+                    <label
+                      class="block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-1.5">Slack
+                      App Token</label>
+                    <input x-model="slackAppToken" type="password" placeholder="xapp-..." class="input-field" />
+                  </div>
+                </div>
+              </section>
+
+              <!-- SECTION 3: Preview & Deploy -->
+              <section class="card">
+                <div class="flex items-center gap-3 mb-5">
+                  <span class="section-number">3</span>
+                  <h2 class="text-base font-semibold">Preview & Deploy</h2>
+                </div>
+                <div class="bg-[rgba(0,0,0,0.2)] border border-[var(--color-border-muted)] rounded-lg p-4 mb-5">
+                  <p class="text-[9px] uppercase tracking-[0.15em] text-[var(--color-text-muted)] font-semibold mb-2.5">
+                    Summary</p>
+                  <dl class="space-y-2 text-[13px]">
+                    <div class="flex justify-between">
+                      <dt class="text-[var(--color-text-secondary)]">Service</dt>
+                      <dd x-text="selectedGroup || '—'" class="text-[var(--color-text-primary)] font-medium"></dd>
+                    </div>
+                    <div class="flex justify-between">
+                      <dt class="text-[var(--color-text-secondary)]">Auth</dt>
+                      <dd x-text="selectedAuth || '—'" class="text-[var(--color-text-primary)] font-medium"></dd>
+                    </div>
+                    <div class="flex justify-between">
+                      <dt class="text-[var(--color-text-secondary)]">Model</dt>
+                      <dd x-text="model || 'Default'" class="text-[var(--color-text-primary)] font-medium"></dd>
+                    </div>
+                    <div class="flex justify-between items-center">
+                      <dt class="text-[var(--color-text-secondary)]">Integrations</dt>
+                      <dd class="flex gap-1.5">
+                        <span x-show="telegramToken"
+                          class="text-[11px] bg-[#0088cc]/10 text-[#29b6f6] px-1.5 py-0.5 rounded">Telegram</span>
+                        <span x-show="discordToken"
+                          class="text-[11px] bg-[#5865F2]/10 text-[#7289da] px-1.5 py-0.5 rounded">Discord</span>
+                        <span x-show="slackBotToken && slackAppToken"
+                          class="text-[11px] bg-[#4A154B]/10 text-[#e01e5a] px-1.5 py-0.5 rounded">Slack</span>
+                        <span x-show="!telegramToken && !discordToken && !(slackBotToken && slackAppToken)"
+                          class="text-[11px] text-[var(--color-text-muted)]">None</span>
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+                <div class="flex flex-wrap items-center gap-3 mb-4">
+                  <button @click="runSetup()" :disabled="loading" class="btn btn-primary">
+                    <span x-show="!loading">▶ Deploy</span>
+                    <span x-show="loading" class="flex items-center gap-2">
+                      <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Deploying...
+                    </span>
+                  </button>
+                  <button @click="resetSetup()" :disabled="loading" class="btn btn-danger">Reset</button>
+                </div>
+                <div x-show="log" class="log-box" x-text="log"></div>
+              </section>
+            </div>
+          </template>
+
+          <!-- ===================== POST-SETUP VIEW ===================== -->
+          <template x-if="isReady && configured">
+            <div class="space-y-6">
+
+              <!-- Two-column layout: left = maintenance + logs, right = actions -->
+              <div class="flex flex-col lg:flex-row gap-6">
+
+                <!-- LEFT COLUMN: Maintenance + Logs -->
+                <div class="flex-1 space-y-6 min-w-0">
+
+                  <!-- All Set Banner -->
+                  <section class="card">
+                    <div class="flex items-center gap-3">
+                      <div
+                        class="w-9 h-9 rounded-full bg-[var(--color-success)]/10 flex items-center justify-center shrink-0">
+                        <svg class="w-4 h-4 text-[var(--color-success)]" fill="none" stroke="currentColor"
+                          viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h2 class="text-base font-semibold">All Set</h2>
+                        <p class="text-[13px] text-[var(--color-text-secondary)]">Your instance is configured and
+                          running</p>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="card">
+                    <h3 class="text-sm font-semibold mb-0.5">Diagnostics</h3>
+                    <p class="text-[12px] text-[var(--color-text-secondary)] mb-3">Run health checks or download a
+                      backup</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button @click="runDoctor()" :disabled="loading" class="btn btn-secondary w-full">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span x-show="!loading">Health Check</span>
+                        <span x-show="loading">Running...</span>
+                      </button>
+                      <button @click="exportData()" :disabled="loading || exporting" class="btn btn-secondary w-full">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        <span x-show="!exporting">Download Backup</span>
+                        <span x-show="exporting">Exporting...</span>
+                      </button>
+                    </div>
+                  </section>
+
+                  <section class="card">
+                    <h3 class="text-sm font-semibold mb-2">Activity Log</h3>
+                    <div class="log-box min-h-[160px]" x-text="log || 'Nothing logged yet.'"></div>
+                  </section>
+                </div>
+
+                <!-- RIGHT COLUMN: Actions + Danger Zone -->
+                <div class="lg:w-72 shrink-0 space-y-6">
+
+                  <!-- Primary Actions -->
+                  <section class="card space-y-3">
+                    <a href="/openclaw" target="_blank" class="btn btn-success w-full">
+                      Launch Dashboard
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                    <button @click="openPairingModal()" :disabled="loading" class="btn btn-secondary w-full">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                      </svg>
+                      Authorize Pairing
+                    </button>
+                    <button @click="openDevicesModal()" :disabled="loading" class="btn btn-secondary w-full">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      Manage Devices
+                    </button>
+                  </section>
+
+                  <section class="card !border-[var(--color-danger)]/20">
+                    <h3 class="text-[12px] font-semibold text-[var(--color-danger)] mb-1.5">Destructive</h3>
+                    <p class="text-[11px] text-[var(--color-text-secondary)] mb-3">Wipe the current configuration so you
+                      can start fresh.</p>
+                    <button @click="resetSetup()" :disabled="loading" class="btn btn-danger w-full text-[12px]">Wipe
+                      Configuration</button>
+                  </section>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </main>
+    </div>
+
+    <!-- ===================== MODALS ===================== -->
+
+    <!-- Devices Modal -->
+    <div x-show="showDevicesModal" x-cloak
+      class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
+      @click.self="showDevicesModal = false">
+      <div class="card w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto !border-[var(--color-border)]">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold">Manage Devices</h3>
+          <div class="flex items-center gap-2">
+            <button @click="loadDevices()" :disabled="devicesLoading"
+              class="p-2 rounded-lg hover:bg-[var(--color-surface-overlay)] text-[var(--color-text-secondary)] transition-colors">
+              <svg class="w-4 h-4" :class="devicesLoading && 'animate-spin'" fill="none" stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+            <button @click="showDevicesModal = false"
+              class="p-2 rounded-lg hover:bg-[var(--color-surface-overlay)] text-[var(--color-text-secondary)] transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <p class="text-sm text-[var(--color-text-secondary)] mb-4">When a new browser connects to the Control UI, it
+          requires a one-time pairing approval.</p>
+        <button @click="approveDevice()" :disabled="devicesLoading" class="btn btn-primary w-full mb-4">
+          <span x-show="!devicesLoading">Approve Latest Request</span>
+          <span x-show="devicesLoading" class="flex items-center gap-2">
+            <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg> Loading...
+          </span>
+        </button>
+        <div class="space-y-4">
+          <div>
+            <h4 class="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)] font-semibold mb-2">Pending
+              Requests</h4>
+            <div x-show="devicesPending.length === 0 && !devicesLoading"
+              class="text-sm text-[var(--color-text-muted)] bg-[var(--color-surface)] rounded-lg p-3 border border-[var(--color-border-muted)]">
+              No pending requests</div>
+            <div class="space-y-2">
+              <template x-for="req in devicesPending" :key="req.requestId || req.id">
+                <div
+                  class="flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border-muted)] rounded-lg p-3">
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium truncate" x-text="req.requestId || req.id"></p>
+                    <p x-show="req.createdAt" class="text-xs text-[var(--color-text-muted)]"
+                      x-text="req.createdAt ? new Date(req.createdAt).toLocaleString() : ''"></p>
+                  </div>
+                  <div class="flex gap-2 ml-3 shrink-0">
+                    <button @click="approveDevice(req.requestId || req.id)" :disabled="devicesLoading"
+                      class="btn btn-success !py-1 !px-3 text-xs">Approve</button>
+                    <button @click="rejectDevice(req.requestId || req.id)" :disabled="devicesLoading"
+                      class="btn btn-danger !py-1 !px-3 text-xs">Reject</button>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+          <div>
+            <h4 class="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)] font-semibold mb-2">Paired
+              Devices</h4>
+            <div x-show="devicesPaired.length === 0 && !devicesLoading"
+              class="text-sm text-[var(--color-text-muted)] bg-[var(--color-surface)] rounded-lg p-3 border border-[var(--color-border-muted)]">
+              No paired devices</div>
+            <div class="space-y-2">
+              <template x-for="dev in devicesPaired" :key="dev.deviceId || dev.id">
+                <div
+                  class="flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border-muted)] rounded-lg p-3">
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium truncate" x-text="dev.deviceId || dev.id"></p>
+                    <p class="text-xs text-[var(--color-text-muted)]">
+                      <span x-show="dev.role" x-text="dev.role"
+                        class="bg-[var(--color-surface-overlay)] px-1.5 py-0.5 rounded mr-1"></span>
+                      <span x-show="dev.createdAt"
+                        x-text="dev.createdAt ? new Date(dev.createdAt).toLocaleString() : ''"></span>
+                    </p>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export Info Modal -->
+    <div x-show="showExportInfo" x-cloak
+      class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
+      @click.self="showExportInfo = false">
+      <div class="card w-full max-w-md mx-4 !border-[var(--color-border)]">
+        <h3 class="text-lg font-semibold mb-4">Unzip Instructions</h3>
+        <p class="text-sm text-[var(--color-text-secondary)] mb-4">The exported ZIP is password-protected with your
+          <strong>SETUP_PASSWORD</strong>.
+        </p>
+        <div class="space-y-4">
+          <div>
+            <p class="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)] font-semibold mb-2">macOS /
+              Linux</p>
+            <code
+              class="block bg-[var(--color-surface)] border border-[var(--color-border-muted)] rounded-lg px-4 py-3 text-sm text-[var(--color-text-secondary)] font-mono">unzip -P YOUR_PASSWORD openclaw-export-*.zip</code>
+          </div>
+          <div>
+            <p class="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)] font-semibold mb-2">Windows
+            </p>
+            <p class="text-sm text-[var(--color-text-secondary)]">Use <a href="https://www.7-zip.org/" target="_blank"
+                class="text-[var(--color-accent)] hover:underline">7-Zip</a> to extract.</p>
+          </div>
+          <div>
+            <p class="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)] font-semibold mb-2">Using 7z
+              CLI</p>
+            <code
+              class="block bg-[var(--color-surface)] border border-[var(--color-border-muted)] rounded-lg px-4 py-3 text-sm text-[var(--color-text-secondary)] font-mono">7z x -pYOUR_PASSWORD openclaw-export-*.zip</code>
+          </div>
+        </div>
+        <button @click="showExportInfo = false" class="btn btn-secondary w-full mt-6">Close</button>
+      </div>
+    </div>
+
+    <!-- Pairing Modal -->
+    <div x-show="showPairingModal" x-cloak
+      class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
+      @click.self="showPairingModal = false">
+      <div class="card w-full max-w-sm mx-4 !border-[var(--color-border)]">
+        <h3 class="text-lg font-semibold mb-4">Approve Channel Access</h3>
+        <div class="space-y-4">
+          <div>
+            <label
+              class="block text-xs uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-2">Channel</label>
+            <select x-model="pairingChannel" class="input-field">
+              <option value="">Select channel...</option>
+              <option value="telegram">Telegram</option>
+              <option value="discord">Discord</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-2">Pairing
+              Code</label>
+            <input x-model="pairingCode" type="text" placeholder="e.g. 3EY4PUYS" class="input-field" />
+          </div>
+          <div class="flex gap-3 pt-2">
+            <button @click="approvePairing()" class="btn btn-primary flex-1">Approve</button>
+            <button @click="showPairingModal = false" class="btn btn-secondary flex-1">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+</body>
+
+</html>
