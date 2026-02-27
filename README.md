@@ -2,7 +2,9 @@
 
 # Deploy and Host OpenClaw (Prev Clawdbot, Moltbot) – Self-Hosted AI Agents on Railway
 
-OpenClaw is a powerful AI agent framework that enables you to run Claude, GPT, or Gemini as your personal assistant. Chat via web, Telegram, Discord, or Slack. Execute code, browse the web, schedule tasks, and maintain conversation context.
+**OpenClaw** (formerly Clawdbot/Moltbot) is a powerful, open-source AI agent framework that lets you run **Claude, ChatGPT, or Gemini** as your own self-hosted private personal assistant. 
+
+Chat securely through the built-in web dashboard, or integrate with Telegram, Discord, and Slack. OpenClaw can execute code, browse the web autonomously, schedule cron tasks, and maintain infinite long-term conversation context. Deploy your own privacy-first AI alternative to ChatGPT on Railway in just one click!
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/openclaw-moltbotclawdbot-autonomous-ai-a?referralCode=QXdhdr&utm_medium=integration&utm_source=template&utm_campaign=generic)
 
@@ -15,51 +17,40 @@ OpenClaw is a powerful AI agent framework that enables you to run Claude, GPT, o
 
 ### Step 2: Note Your Credentials
 
-Check the **Variables** tab and save these values:
+Check the **Variables** tab and save following:
 
 - **SETUP_PASSWORD**: Your password for accessing the setup wizard
-- **OPENCLAW_GATEWAY_TOKEN**: Auto-generated 64-character token for gateway authentication
 
-⚠️ **Keep these secure!** You'll need them in the next steps.
+⚠️ **Keep this secure!** You'll need this in the next steps.
 
-### Step 3: Generate Public Domain
+### Step 3: Access Setup Wizard
 
-1. Go to **Settings** → **Networking** → Click **"Generate Domain"**
-2. Copy your Railway URL (e.g., `your-app-xyz.up.railway.app`)
-
-### Step 4: Access Setup Wizard
-
-1. Visit: `https://your-app-xyz.up.railway.app/setup`
+1. Click on the URL provided by Railway in your project dashboard (e.g., `https://your-app-xyz.up.railway.app`)
 2. Login prompt appears:
    - **Username**: Leave blank (press Enter)
    - **Password**: Enter your `SETUP_PASSWORD`
 
-### Step 5: Configure Your AI Agent
+### Step 4: Complete the Setup Wizard
 
-In the setup wizard:
+Once you log in, follow the intuitive 7-step guide on the left side of the setup screen to bring your AI agent online:
 
-![OpenClaw setup using UI](https://res.cloudinary.com/asset-cloudinary/image/upload/v1769907891/setup_page_wgyx8k.png)
+![OpenClaw setup using UI](https://res.cloudinary.com/asset-cloudinary/image/upload/v1772221059/setup_done_l8tzjn.png)
 
-1. **Provider Group**: Choose your AI provider (e.g., "Anthropic")
-2. **Auth Method**: Select "Anthropic API key" (or your provider's method)
-3. **Key/Token**: Paste your API key
-4. **Wizard Flow**: Keep as "quickstart"
-5. Click **"Run Setup"**
-6. Wait for completion (~30-60 seconds)
+1. Select your **provider & auth type**, then paste your API key
+2. Add **channels** (optional — can be done later)
+3. Click **Run Setup**
+4. If you added a channel token, click **Authorize Channel** and enter the code
+   *(After setup, message your bot on the channel. It will reply with a pairing code. Enter that code here to grant DM access.)*
+5. Click **Launch Dashboard**
+6. First login? Click **Approve Pairing** → **Approve Latest Request**
+   *(New browsers need a one-time device approval. After clicking "Launch Dashboard", come back here, click "Approve Pairing", and approve the pending request.)*
+7. You should now see **Health: OK** in the OpenClaw UI.
 
-### Step 7: Connect to Gateway
+![Health Ok](https://res.cloudinary.com/asset-cloudinary/image/upload/v1772139788/health_ok_swgk94.png)
 
-![OpenClaw Gateway token update](https://res.cloudinary.com/asset-cloudinary/image/upload/v1769907892/gateway_update_bs29gv.png)
-1. Click **"Open OpenClaw UI"** at the top of the setup page
-2. Navigate to **Overview** in the sidebar
-3. Find the **Gateway Access** section
-4. Paste your `OPENCLAW_GATEWAY_TOKEN` in the token field
-5. Click **"Connect"**
-6. Status changes to **Connected** 🟢
+### Step 5: Start Chatting
 
-### Step 8: Start Chatting
-
-1. Click **"Chat"** in the sidebar
+1. Click **"Chat"** in the sidebar of the newly opened OpenClaw UI
 2. Type your first message
 3. Enjoy your self-hosted AI assistant! 🎉
 
@@ -235,9 +226,30 @@ Yes! The web UI at `/` provides a full-featured chat interface. Telegram, Discor
 
 ### Can I run multiple OpenClaw instances?
 
-Yes! Each Railway service can run its own independent OpenClaw instance:
-1. Deploy the template multiple times
-2. Each gets its own domain, volume, and configuration
-3. You can have separate instances for different purposes (personal, work, testing)
-4. Each instance needs its own API keys (or can share, depending on your API limits)
+Yes! Each Railway service can run its own independent OpenClaw instance. Just deploy this template multiple times for separate personal, work, or testing environments.
+
+### How to fix: disconnected (1008): pairing required
+
+If you see this error in your dashboard logs or get instantly disconnected when opening the UI, it's a security feature! New browsers/devices need to be manually approved.
+**Solution**: Go back to your `/setup` wizard page, click the **Approve Pairing** button on the right side, and approve the pending connection request.
+
+### 🖥️ How do I access the Terminal UI (TUI)?
+
+If you prefer a hacker-style terminal interface over the web dashboard, you can access the OpenClaw TUI! Ensure you have set the `ENABLE_WEB_TUI` to True in Railway Variables. You can access the TUI at /tui.
+
+### 🔌 How do I add more channels (Telegram/Discord) later?
+
+You have two easy options if you skipped adding channels during your initial configuration:
+1. **From the Dashboard**: Open your main OpenClaw UI, navigate to the config/settings section, and paste your tokens directly.
+2. **From the Setup Wizard**: Revisit your `/setup` page, enter the new bot tokens in the Channels section, and hit "Run Setup" again to smoothly update your configuration.
+
+---
+
+## 🤝 Found an Issue? Need Help?
+
+Notice a bug with this Railway template (like API key errors, UI glitches, or broken deployment flows)? 
+
+👉 **[Raise an issue on GitHub here!](https://github.com/praveen-ks-2001/openclaw-railway-template-enhanced/issues)**
+
+We actively monitor feedback to ensure your self-hosted AI agents run smoothly.
 
