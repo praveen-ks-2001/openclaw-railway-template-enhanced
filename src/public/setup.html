@@ -43,9 +43,9 @@
     ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
 
     .step-num {
-      width: 22px; height: 22px; border-radius: 50%;
+      width: 28px; height: 28px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
-      font-size: 10px; font-weight: 600; flex-shrink: 0;
+      font-size: 13px; font-weight: 600; flex-shrink: 0;
       background: rgba(230, 57, 70, 0.08); color: var(--color-accent);
       border: 1px solid rgba(230, 57, 70, 0.15);
     }
@@ -53,7 +53,7 @@
     .card {
       background: var(--color-surface-raised);
       border: 1px solid var(--color-border-muted);
-      border-radius: 14px; padding: 24px;
+      border-radius: 18px; padding: 32px;
       transition: border-color 0.3s ease, box-shadow 0.3s ease;
       position: relative; z-index: 1;
     }
@@ -63,9 +63,9 @@
     }
 
     .input-field {
-      width: 100%; padding: 11px 14px; font-size: 14px; font-family: inherit;
+      width: 100%; padding: 14px 18px; font-size: 16px; font-family: inherit;
       background: rgba(0, 0, 0, 0.3); color: var(--color-text-primary);
-      border: 1px solid var(--color-border); border-radius: 8px;
+      border: 1px solid var(--color-border); border-radius: 10px;
       outline: none; transition: all 0.2s ease;
     }
     .input-field::placeholder { color: var(--color-text-muted); }
@@ -76,12 +76,12 @@
     select.input-field {
       appearance: none; cursor: pointer;
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2752525b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-      background-repeat: no-repeat; background-position: right 12px center; background-size: 14px; padding-right: 36px;
+      background-repeat: no-repeat; background-position: right 14px center; background-size: 16px; padding-right: 42px;
     }
 
     .btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-      padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 500;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 14px 24px; border-radius: 10px; font-size: 15px; font-weight: 500;
       cursor: pointer; border: none; font-family: inherit;
       transition: all 0.2s ease;
     }
@@ -114,33 +114,33 @@
     }
 
     .section-number {
-      width: 28px; height: 28px; border-radius: 50%;
+      width: 36px; height: 36px; border-radius: 50%;
       background: var(--color-accent);
       color: #fff; display: flex; align-items: center; justify-content: center;
-      font-size: 12px; font-weight: 700; flex-shrink: 0;
+      font-size: 16px; font-weight: 700; flex-shrink: 0;
     }
 
     .log-box {
       background: rgba(0, 0, 0, 0.35); border: 1px solid var(--color-border-muted);
-      border-radius: 8px; padding: 14px;
+      border-radius: 8px; padding: 18px;
       font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
-      font-size: 12px; color: var(--color-text-secondary); white-space: pre-wrap;
+      font-size: 14px; color: var(--color-text-secondary); white-space: pre-wrap;
       max-height: 400px; overflow-y: auto;
     }
 
     .info-tooltip {
       position: relative; display: inline-flex; align-items: center; justify-content: center;
-      width: 15px; height: 15px; border-radius: 50%;
+      width: 18px; height: 18px; border-radius: 50%;
       background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
-      color: var(--color-text-muted); font-size: 9px; font-weight: 700;
+      color: var(--color-text-muted); font-size: 11px; font-weight: 700;
       cursor: help; flex-shrink: 0;
     }
     .info-tooltip:hover { background: rgba(255,255,255,0.1); }
     .info-tooltip:hover .info-tooltip-content { display: block; }
     .info-tooltip-content {
-      display: none; position: absolute; left: 22px; top: -8px; width: 230px;
+      display: none; position: absolute; left: 26px; top: -10px; width: 280px;
       background: #18181b; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
-      padding: 10px 12px; font-size: 12px; font-weight: 400;
+      padding: 14px 16px; font-size: 14px; font-weight: 400;
       color: var(--color-text-secondary); line-height: 1.5; z-index: 50;
       box-shadow: 0 8px 30px rgba(0,0,0,0.6);
     }
@@ -485,24 +485,24 @@
   <!-- TOP BAR -->
   <header
     class="fixed top-0 left-0 right-0 z-30 bg-[var(--color-surface)]/95 backdrop-blur-md border-b border-[var(--color-border-muted)] flex justify-center">
-    <div class="w-full px-8 py-3 flex items-center justify-between">
-      <div class="flex items-center gap-3">
+    <div class="w-full px-12 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-4">
         <img src="https://res.cloudinary.com/asset-cloudinary/image/upload/v1769907898/openclaw-logo-text_w3qcgl.avif"
-          alt="OpenClaw" class="h-6">
-        <span class="text-[11px] text-[var(--color-text-muted)] font-medium tracking-wide">Configuration</span>
+          alt="OpenClaw" class="h-8">
+        <span class="text-[14px] text-[var(--color-text-muted)] font-medium tracking-wide">Configuration</span>
       </div>
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-4">
         <span x-show="configured"
-          class="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-[var(--color-success)]/10 text-[var(--color-success)] border border-[var(--color-success)]/20">
-          <span class="w-1.5 h-1.5 rounded-full bg-[var(--color-success)]"></span> Ready
+          class="inline-flex items-center gap-2 text-[13px] font-medium px-3.5 py-1.5 rounded-full bg-[var(--color-success)]/10 text-[var(--color-success)] border border-[var(--color-success)]/20">
+          <span class="w-2 h-2 rounded-full bg-[var(--color-success)]"></span> Ready
         </span>
         <span x-show="!configured && isReady"
-          class="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-[var(--color-warning)]/10 text-[var(--color-warning)] border border-[var(--color-warning)]/20">
-          <span class="w-1.5 h-1.5 rounded-full bg-[var(--color-warning)]" style="animation: pulse 2s infinite;"></span>
+          class="inline-flex items-center gap-2 text-[13px] font-medium px-3.5 py-1.5 rounded-full bg-[var(--color-warning)]/10 text-[var(--color-warning)] border border-[var(--color-warning)]/20">
+          <span class="w-2 h-2 rounded-full bg-[var(--color-warning)]" style="animation: pulse 2s infinite;"></span>
           Pending setup
         </span>
         <a x-show="tuiEnabled && configured" href="/tui" target="_blank"
-          class="btn btn-secondary text-xs !py-1 !px-2.5">Terminal</a>
+          class="btn btn-secondary text-[14px] !py-1.5 !px-3.5">Terminal</a>
       </div>
     </div>
   </header>
@@ -511,63 +511,63 @@
     <div class="flex">
 
       <!-- LEFT SIDEBAR -->
-      <aside class="hidden lg:block w-[260px] shrink-0 border-r border-[var(--color-border-muted)] min-h-screen">
-        <div class="sticky top-[48px] p-5 pt-8">
-          <p class="text-[9px] uppercase tracking-[0.15em] text-[var(--color-text-muted)] font-semibold mb-5">Quick
+      <aside class="hidden lg:block w-[360px] shrink-0 border-r border-[var(--color-border-muted)] min-h-screen">
+        <div class="sticky top-[64px] p-8 pt-12">
+          <p class="text-[12px] uppercase tracking-[0.15em] text-[var(--color-text-muted)] font-semibold mb-6">Quick
             guide</p>
-          <ol class="space-y-3.5">
-            <li class="flex items-start gap-2.5">
+          <ol class="space-y-5">
+            <li class="flex items-start gap-3">
               <span class="step-num">1</span>
-              <p class="text-[12px] text-[var(--color-text-secondary)] leading-relaxed">Pick your <strong
+              <p class="text-[15px] text-[var(--color-text-secondary)] leading-relaxed">Pick your <strong
                   class="text-[var(--color-text-primary)]">AI provider</strong> and enter credentials</p>
             </li>
-            <li class="flex items-start gap-2.5">
+            <li class="flex items-start gap-3">
               <span class="step-num">2</span>
-              <p class="text-[12px] text-[var(--color-text-secondary)] leading-relaxed">Link <strong
+              <p class="text-[15px] text-[var(--color-text-secondary)] leading-relaxed">Link <strong
                   class="text-[var(--color-text-primary)]">messaging platforms</strong> (skip if not needed)</p>
             </li>
-            <li class="flex items-start gap-2.5">
+            <li class="flex items-start gap-3">
               <span class="step-num">3</span>
-              <p class="text-[12px] text-[var(--color-text-primary)] leading-relaxed">Review and <strong>deploy</strong>
+              <p class="text-[15px] text-[var(--color-text-primary)] leading-relaxed">Review and <strong>deploy</strong>
               </p>
             </li>
-            <li class="flex items-start gap-2.5">
+            <li class="flex items-start gap-3">
               <span class="step-num">4</span>
               <div class="relative">
-                <span class="text-[12px] text-[var(--color-text-secondary)] leading-relaxed">Authorize channel bots via
+                <span class="text-[15px] text-[var(--color-text-secondary)] leading-relaxed">Authorize channel bots via
                   <strong class="text-[var(--color-text-primary)]">Approve Pairing</strong></span>
-                <div class="info-tooltip inline-flex ml-1 relative mt-[1px]">i
-                  <div class="info-tooltip-content" style="top: -10px; left: 22px; width: 240px;">Send any message to
+                <div class="info-tooltip inline-flex ml-1.5 relative mt-[2px]">i
+                  <div class="info-tooltip-content">Send any message to
                     your bot on Telegram or Discord. It responds with a pairing code — enter that code here to grant
                     access.</div>
                 </div>
               </div>
             </li>
-            <li class="flex items-start gap-2.5">
+            <li class="flex items-start gap-3">
               <span class="step-num">5</span>
-              <p class="text-[12px] text-[var(--color-text-primary)] leading-relaxed">Launch the <strong>OpenClaw
+              <p class="text-[15px] text-[var(--color-text-primary)] leading-relaxed">Launch the <strong>OpenClaw
                   dashboard</strong></p>
             </li>
-            <li class="flex items-start gap-2.5">
+            <li class="flex items-start gap-3">
               <span class="step-num">6</span>
               <div class="relative">
-                <span class="text-[12px] text-[var(--color-text-secondary)] leading-relaxed">New browser? Go to <strong
-                    class="text-[var(--color-text-primary)]">Manage Devices</strong> and approve it</span>
-                <div class="info-tooltip inline-flex ml-1 relative mt-[1px]">i
-                  <div class="info-tooltip-content" style="top: -20px; left: 22px; width: 240px;">Each new browser
+                <span class="text-[15px] text-[var(--color-text-secondary)] leading-relaxed">New browser? Go to <strong
+                    class="text-[var(--color-text-primary)]">Approve Pairing</strong> and approve it</span>
+                <div class="info-tooltip inline-flex ml-1.5 relative mt-[2px]">i
+                  <div class="info-tooltip-content">Each new browser
                     requires a one-time device approval. Open the dashboard first, then come back and approve the
                     pending request.</div>
                 </div>
               </div>
             </li>
-            <li class="flex items-start gap-2.5">
+            <li class="flex items-start gap-3">
               <span class="step-num">7</span>
-              <p class="text-[12px] text-[var(--color-text-secondary)] leading-relaxed">Verify <strong
+              <p class="text-[15px] text-[var(--color-text-secondary)] leading-relaxed">Verify <strong
                   class="text-[var(--color-text-primary)]">Health: OK</strong> in the dashboard</p>
             </li>
           </ol>
 
-          <div class="mt-6 text-[10px] text-[var(--color-text-muted)]">
+          <div class="mt-8 text-[12px] text-[var(--color-text-muted)]">
             <span x-show="openclawVersion" x-text="'v' + openclawVersion"></span>
           </div>
         </div>
@@ -575,22 +575,22 @@
 
       <!-- MAIN CONTENT -->
       <main class="flex-1 min-w-0">
-        <div class="max-w-2xl mx-auto px-8 py-8 space-y-6">
+        <div class="max-w-[1000px] mx-auto px-10 py-12 space-y-10">
 
           <!-- ===================== PRE-SETUP VIEW ===================== -->
           <template x-if="isReady && !configured">
             <div class="space-y-6">
 
               <!-- SECTION 1: AI Provider -->
-              <section class="card">
-                <div class="flex items-center gap-3 mb-5">
+              <section class="pb-10 border-b border-[var(--color-border-muted)] first:pt-0">
+                <div class="flex items-center gap-4 mb-6">
                   <span class="section-number">1</span>
-                  <h2 class="text-base font-semibold">AI Provider</h2>
+                  <h2 class="text-xl font-semibold">AI Provider</h2>
                 </div>
-                <div class="space-y-4">
+                <div class="space-y-6">
                   <div>
                     <label
-                      class="block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-1.5">Service</label>
+                      class="block text-[13px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-2">Service</label>
                     <select x-model="selectedGroup" @change="updateAuthChoices()" class="input-field">
                       <template x-for="g in authGroups" :key="g.value">
                         <option :value="g.value" x-text="g.label + (g.hint ? ' — ' + g.hint : '')"></option>
@@ -599,7 +599,7 @@
                   </div>
                   <div>
                     <label
-                      class="block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-1.5">Authentication</label>
+                      class="block text-[13px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-2">Authentication</label>
                     <select x-model="selectedAuth" class="input-field">
                       <template x-for="o in authChoices" :key="o.value">
                         <option :value="o.value" x-text="o.label + (o.hint ? ' — ' + o.hint : '')"></option>
@@ -608,62 +608,62 @@
                   </div>
                   <div>
                     <label
-                      class="block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-1.5">Secret
+                      class="block text-[13px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-2">Secret
                       Key</label>
                     <input x-model="authSecret" type="password" placeholder="Enter your API key or access token"
                       class="input-field" />
                   </div>
                   <div>
                     <label
-                      class="block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-1.5">Model</label>
+                      class="block text-[13px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-2">Model</label>
                     <input x-model="model" type="text" placeholder="e.g. openai/gpt-4.1, anthropic/claude-sonnet-4"
                       class="input-field" />
-                    <p class="text-[11px] text-[var(--color-text-muted)] mt-1">Use the format provider/model-name</p>
+                    <p class="text-[13px] text-[var(--color-text-muted)] mt-2">Use the format provider/model-name</p>
                   </div>
                 </div>
               </section>
 
-              <!-- SECTION 2: Integrations -->
-              <section class="card">
-                <div class="flex items-center gap-3 mb-2">
+              <!-- SECTION 2: Channels -->
+              <section class="py-10 border-b border-[var(--color-border-muted)]">
+                <div class="flex items-center gap-4 mb-2">
                   <span class="section-number">2</span>
-                  <h2 class="text-base font-semibold">Integrations</h2>
+                  <h2 class="text-xl font-semibold">Channels</h2>
                   <span
-                    class="text-[9px] uppercase tracking-wide font-semibold text-[var(--color-text-muted)] bg-[var(--color-surface-overlay)] px-1.5 py-0.5 rounded">Optional</span>
+                    class="text-[11px] uppercase tracking-wide font-semibold text-[var(--color-text-muted)] bg-[var(--color-surface-overlay)] px-2 py-1 rounded">Optional</span>
                 </div>
-                <p class="text-[13px] text-[var(--color-text-secondary)] mb-5 ml-10">Hook up messaging services. This
+                <p class="text-[15px] text-[var(--color-text-secondary)] mb-8 ml-12">Hook up messaging services. This
                   can also be configured later from the dashboard.</p>
-                <div class="space-y-4">
+                <div class="space-y-6">
                   <div>
                     <label
-                      class="block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-1.5">Telegram
+                      class="block text-[13px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-2">Telegram
                       Token</label>
                     <input x-model="telegramToken" type="password" placeholder="Bot token from @BotFather"
                       class="input-field" />
-                    <p class="text-[11px] text-[var(--color-text-muted)] mt-1">Create via <a
+                    <p class="text-[13px] text-[var(--color-text-muted)] mt-2">Create via <a
                         href="https://t.me/BotFather" target="_blank"
                         class="text-[var(--color-accent)] hover:underline">@BotFather</a> → <code
-                        class="text-[11px] bg-[var(--color-surface-overlay)] px-1 py-0.5 rounded">/newbot</code></p>
+                        class="text-[13px] bg-[var(--color-surface-overlay)] px-1.5 py-0.5 rounded">/newbot</code></p>
                   </div>
                   <div>
                     <label
-                      class="block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-1.5">Discord
+                      class="block text-[13px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-2">Discord
                       Token</label>
                     <input x-model="discordToken" type="password" placeholder="Bot token from Developer Portal"
                       class="input-field" />
-                    <p class="text-[11px] text-[var(--color-text-muted)] mt-1">Make sure <strong
+                    <p class="text-[13px] text-[var(--color-text-muted)] mt-2">Make sure <strong
                         class="text-[var(--color-warning)]">MESSAGE CONTENT INTENT</strong> is enabled under Privileged
                       Gateway Intents</p>
                   </div>
                   <div>
                     <label
-                      class="block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-1.5">Slack
+                      class="block text-[13px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-2">Slack
                       Bot Token</label>
                     <input x-model="slackBotToken" type="password" placeholder="xoxb-..." class="input-field" />
                   </div>
                   <div>
                     <label
-                      class="block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-1.5">Slack
+                      class="block text-[13px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-2">Slack
                       App Token</label>
                     <input x-model="slackAppToken" type="password" placeholder="xapp-..." class="input-field" />
                   </div>
@@ -671,15 +671,15 @@
               </section>
 
               <!-- SECTION 3: Preview & Deploy -->
-              <section class="card">
-                <div class="flex items-center gap-3 mb-5">
+              <section class="pt-10 last:border-0 border-b border-[var(--color-border-muted)]">
+                <div class="flex items-center gap-4 mb-8">
                   <span class="section-number">3</span>
-                  <h2 class="text-base font-semibold">Preview & Deploy</h2>
+                  <h2 class="text-xl font-semibold">Preview & Deploy</h2>
                 </div>
-                <div class="bg-[rgba(0,0,0,0.2)] border border-[var(--color-border-muted)] rounded-lg p-4 mb-5">
-                  <p class="text-[9px] uppercase tracking-[0.15em] text-[var(--color-text-muted)] font-semibold mb-2.5">
+                <div class="bg-[rgba(0,0,0,0.2)] border border-[var(--color-border-muted)] rounded-[14px] p-6 mb-8">
+                  <p class="text-[11px] uppercase tracking-[0.15em] text-[var(--color-text-muted)] font-semibold mb-3">
                     Summary</p>
-                  <dl class="space-y-2 text-[13px]">
+                  <dl class="space-y-3 text-[15px]">
                     <div class="flex justify-between">
                       <dt class="text-[var(--color-text-secondary)]">Service</dt>
                       <dd x-text="selectedGroup || '—'" class="text-[var(--color-text-primary)] font-medium"></dd>
@@ -693,25 +693,25 @@
                       <dd x-text="model || 'Default'" class="text-[var(--color-text-primary)] font-medium"></dd>
                     </div>
                     <div class="flex justify-between items-center">
-                      <dt class="text-[var(--color-text-secondary)]">Integrations</dt>
-                      <dd class="flex gap-1.5">
+                      <dt class="text-[var(--color-text-secondary)]">Channels</dt>
+                      <dd class="flex gap-2">
                         <span x-show="telegramToken"
-                          class="text-[11px] bg-[#0088cc]/10 text-[#29b6f6] px-1.5 py-0.5 rounded">Telegram</span>
+                          class="text-[12px] bg-[#0088cc]/10 text-[#29b6f6] px-2 py-1 rounded">Telegram</span>
                         <span x-show="discordToken"
-                          class="text-[11px] bg-[#5865F2]/10 text-[#7289da] px-1.5 py-0.5 rounded">Discord</span>
+                          class="text-[12px] bg-[#5865F2]/10 text-[#7289da] px-2 py-1 rounded">Discord</span>
                         <span x-show="slackBotToken && slackAppToken"
-                          class="text-[11px] bg-[#4A154B]/10 text-[#e01e5a] px-1.5 py-0.5 rounded">Slack</span>
+                          class="text-[12px] bg-[#4A154B]/10 text-[#e01e5a] px-2 py-1 rounded">Slack</span>
                         <span x-show="!telegramToken && !discordToken && !(slackBotToken && slackAppToken)"
-                          class="text-[11px] text-[var(--color-text-muted)]">None</span>
+                          class="text-[13px] text-[var(--color-text-muted)]">None</span>
                       </dd>
                     </div>
                   </dl>
                 </div>
-                <div class="flex flex-wrap items-center gap-3 mb-4">
+                <div class="flex flex-wrap items-center gap-4 mb-6">
                   <button @click="runSetup()" :disabled="loading" class="btn btn-primary">
                     <span x-show="!loading">▶ Deploy</span>
                     <span x-show="loading" class="flex items-center gap-2">
-                      <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
@@ -720,7 +720,7 @@
                   </button>
                   <button @click="resetSetup()" :disabled="loading" class="btn btn-danger">Reset</button>
                 </div>
-                <div x-show="log" class="log-box" x-text="log"></div>
+                <div x-show="log" class="log-box mb-8" x-text="log"></div>
               </section>
             </div>
           </template>
@@ -733,33 +733,33 @@
               <div class="flex flex-col lg:flex-row gap-6">
 
                 <!-- LEFT COLUMN: Maintenance + Logs -->
-                <div class="flex-1 space-y-6 min-w-0">
+                <div class="flex-1 space-y-8 min-w-0">
 
                   <!-- All Set Banner -->
                   <section class="card">
-                    <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-4">
                       <div
-                        class="w-9 h-9 rounded-full bg-[var(--color-success)]/10 flex items-center justify-center shrink-0">
-                        <svg class="w-4 h-4 text-[var(--color-success)]" fill="none" stroke="currentColor"
+                        class="w-12 h-12 rounded-full bg-[var(--color-success)]/10 flex items-center justify-center shrink-0">
+                        <svg class="w-6 h-6 text-[var(--color-success)]" fill="none" stroke="currentColor"
                           viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                         </svg>
                       </div>
                       <div>
-                        <h2 class="text-base font-semibold">All Set</h2>
-                        <p class="text-[13px] text-[var(--color-text-secondary)]">Your instance is configured and
+                        <h2 class="text-xl font-semibold">All Set</h2>
+                        <p class="text-[15px] text-[var(--color-text-secondary)] mt-0.5">Your instance is configured and
                           running</p>
                       </div>
                     </div>
                   </section>
 
                   <section class="card">
-                    <h3 class="text-sm font-semibold mb-0.5">Diagnostics</h3>
-                    <p class="text-[12px] text-[var(--color-text-secondary)] mb-3">Run health checks or download a
+                    <h3 class="text-lg font-semibold mb-1">Diagnostics</h3>
+                    <p class="text-[14px] text-[var(--color-text-secondary)] mb-4">Run health checks or download a
                       backup</p>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <button @click="runDoctor()" :disabled="loading" class="btn btn-secondary w-full">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -769,7 +769,7 @@
                         <span x-show="loading">Running...</span>
                       </button>
                       <button @click="exportData()" :disabled="loading || exporting" class="btn btn-secondary w-full">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
@@ -780,44 +780,46 @@
                   </section>
 
                   <section class="card">
-                    <h3 class="text-sm font-semibold mb-2">Activity Log</h3>
-                    <div class="log-box min-h-[160px]" x-text="log || 'Nothing logged yet.'"></div>
+                    <h3 class="text-lg font-semibold mb-3">Activity Log</h3>
+                    <div class="log-box min-h-[200px]" x-text="log || 'Nothing logged yet.'"></div>
                   </section>
                 </div>
 
                 <!-- RIGHT COLUMN: Actions + Danger Zone -->
-                <div class="lg:w-72 shrink-0 space-y-6">
+                <div class="lg:w-80 shrink-0 space-y-8">
 
                   <!-- Primary Actions -->
-                  <section class="card space-y-3">
-                    <a href="/openclaw" target="_blank" class="btn btn-success w-full">
+                  <section class="card space-y-4">
+                    <a href="/openclaw" target="_blank" class="btn btn-success w-full text-[16px] py-4">
                       Launch Dashboard
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg class="w-5 h-5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                       </svg>
                     </a>
-                    <button @click="openPairingModal()" :disabled="loading" class="btn btn-secondary w-full">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button @click="openPairingModal()" :disabled="loading"
+                      class="btn btn-secondary w-full text-[15px]">
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                       </svg>
-                      Authorize Pairing
+                      Authorize Channel
                     </button>
-                    <button @click="openDevicesModal()" :disabled="loading" class="btn btn-secondary w-full">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button @click="openDevicesModal()" :disabled="loading"
+                      class="btn btn-secondary w-full text-[15px]">
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                       </svg>
-                      Manage Devices
+                      Approve Pairing
                     </button>
                   </section>
 
                   <section class="card !border-[var(--color-danger)]/20">
-                    <h3 class="text-[12px] font-semibold text-[var(--color-danger)] mb-1.5">Destructive</h3>
-                    <p class="text-[11px] text-[var(--color-text-secondary)] mb-3">Wipe the current configuration so you
+                    <h3 class="text-[14px] font-semibold text-[var(--color-danger)] mb-2">Destructive</h3>
+                    <p class="text-[13px] text-[var(--color-text-secondary)] mb-4">Wipe the current configuration so you
                       can start fresh.</p>
-                    <button @click="resetSetup()" :disabled="loading" class="btn btn-danger w-full text-[12px]">Wipe
+                    <button @click="resetSetup()" :disabled="loading" class="btn btn-danger w-full text-[14px]">Wipe
                       Configuration</button>
                   </section>
                 </div>
@@ -834,9 +836,9 @@
     <div x-show="showDevicesModal" x-cloak
       class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
       @click.self="showDevicesModal = false">
-      <div class="card w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto !border-[var(--color-border)]">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold">Manage Devices</h3>
+      <div class="card w-full max-w-xl mx-4 max-h-[80vh] overflow-y-auto !border-[var(--color-border)]">
+        <div class="flex items-center justify-between mb-6">
+          <h3 class="text-xl font-semibold">Approve Pairing</h3>
           <div class="flex items-center gap-2">
             <button @click="loadDevices()" :disabled="devicesLoading"
               class="p-2 rounded-lg hover:bg-[var(--color-surface-overlay)] text-[var(--color-text-secondary)] transition-colors">

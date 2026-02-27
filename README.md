@@ -15,51 +15,40 @@ OpenClaw is a powerful AI agent framework that enables you to run Claude, GPT, o
 
 ### Step 2: Note Your Credentials
 
-Check the **Variables** tab and save these values:
+Check the **Variables** tab and save following:
 
 - **SETUP_PASSWORD**: Your password for accessing the setup wizard
-- **OPENCLAW_GATEWAY_TOKEN**: Auto-generated 64-character token for gateway authentication
 
-⚠️ **Keep these secure!** You'll need them in the next steps.
+⚠️ **Keep this secure!** You'll need this in the next steps.
 
-### Step 3: Generate Public Domain
+### Step 3: Access Setup Wizard
 
-1. Go to **Settings** → **Networking** → Click **"Generate Domain"**
-2. Copy your Railway URL (e.g., `your-app-xyz.up.railway.app`)
-
-### Step 4: Access Setup Wizard
-
-1. Visit: `https://your-app-xyz.up.railway.app/setup`
+1. Click on the URL provided by Railway in your project dashboard (e.g., `https://your-app-xyz.up.railway.app`)
 2. Login prompt appears:
    - **Username**: Leave blank (press Enter)
    - **Password**: Enter your `SETUP_PASSWORD`
 
-### Step 5: Configure Your AI Agent
+### Step 4: Complete the Setup Wizard
 
-In the setup wizard:
+Once you log in, follow the intuitive 7-step guide on the left side of the setup screen to bring your AI agent online:
 
-![OpenClaw setup using UI](https://res.cloudinary.com/asset-cloudinary/image/upload/v1769907891/setup_page_wgyx8k.png)
+![OpenClaw setup using UI](https://res.cloudinary.com/asset-cloudinary/image/upload/v1772139854/setup_page_pt4haa.png)
 
-1. **Provider Group**: Choose your AI provider (e.g., "Anthropic")
-2. **Auth Method**: Select "Anthropic API key" (or your provider's method)
-3. **Key/Token**: Paste your API key
-4. **Wizard Flow**: Keep as "quickstart"
-5. Click **"Run Setup"**
-6. Wait for completion (~30-60 seconds)
+1. Select your **provider & auth type**, then paste your API key
+2. Add **channels** (optional — can be done later)
+3. Click **Run Setup**
+4. If you added a channel token, click **Authorize Channel** and enter the code
+   *(After setup, message your bot on the channel. It will reply with a pairing code. Enter that code here to grant DM access.)*
+5. Click **Launch Dashboard**
+6. First login? Click **Approve Pairing** → **Approve Latest Request**
+   *(New browsers need a one-time device approval. After clicking "Launch Dashboard", come back here, click "Approve Pairing", and approve the pending request.)*
+7. You should now see **Health: OK** in the OpenClaw UI.
 
-### Step 7: Connect to Gateway
+![Health Ok](https://res.cloudinary.com/asset-cloudinary/image/upload/v1772139788/health_ok_swgk94.png)
 
-![OpenClaw Gateway token update](https://res.cloudinary.com/asset-cloudinary/image/upload/v1769907892/gateway_update_bs29gv.png)
-1. Click **"Open OpenClaw UI"** at the top of the setup page
-2. Navigate to **Overview** in the sidebar
-3. Find the **Gateway Access** section
-4. Paste your `OPENCLAW_GATEWAY_TOKEN` in the token field
-5. Click **"Connect"**
-6. Status changes to **Connected** 🟢
+### Step 5: Start Chatting
 
-### Step 8: Start Chatting
-
-1. Click **"Chat"** in the sidebar
+1. Click **"Chat"** in the sidebar of the newly opened OpenClaw UI
 2. Type your first message
 3. Enjoy your self-hosted AI assistant! 🎉
 
