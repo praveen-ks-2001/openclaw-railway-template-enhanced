@@ -2,7 +2,9 @@
 
 # Deploy and Host OpenClaw (Prev Clawdbot, Moltbot) – Self-Hosted AI Agents on Railway
 
-OpenClaw is a powerful AI agent framework that enables you to run Claude, GPT, or Gemini as your personal assistant. Chat via web, Telegram, Discord, or Slack. Execute code, browse the web, schedule tasks, and maintain conversation context.
+**OpenClaw** (formerly Clawdbot/Moltbot) is a powerful, open-source AI agent framework that lets you run **Claude, ChatGPT, or Gemini** as your own self-hosted private personal assistant. 
+
+Chat securely through the built-in web dashboard, or integrate with Telegram, Discord, and Slack. OpenClaw can execute code, browse the web autonomously, schedule cron tasks, and maintain infinite long-term conversation context. Deploy your own privacy-first AI alternative to ChatGPT on Railway in just one click!
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/openclaw-moltbotclawdbot-autonomous-ai-a?referralCode=QXdhdr&utm_medium=integration&utm_source=template&utm_campaign=generic)
 
@@ -32,7 +34,7 @@ Check the **Variables** tab and save following:
 
 Once you log in, follow the intuitive 7-step guide on the left side of the setup screen to bring your AI agent online:
 
-![OpenClaw setup using UI](https://res.cloudinary.com/asset-cloudinary/image/upload/v1772139854/setup_page_pt4haa.png)
+![OpenClaw setup using UI](https://res.cloudinary.com/asset-cloudinary/image/upload/v1772221059/setup_done_l8tzjn.png)
 
 1. Select your **provider & auth type**, then paste your API key
 2. Add **channels** (optional — can be done later)
@@ -224,9 +226,30 @@ Yes! The web UI at `/` provides a full-featured chat interface. Telegram, Discor
 
 ### Can I run multiple OpenClaw instances?
 
-Yes! Each Railway service can run its own independent OpenClaw instance:
-1. Deploy the template multiple times
-2. Each gets its own domain, volume, and configuration
-3. You can have separate instances for different purposes (personal, work, testing)
-4. Each instance needs its own API keys (or can share, depending on your API limits)
+Yes! Each Railway service can run its own independent OpenClaw instance. Just deploy this template multiple times for separate personal, work, or testing environments.
+
+### How to fix: disconnected (1008): pairing required
+
+If you see this error in your dashboard logs or get instantly disconnected when opening the UI, it's a security feature! New browsers/devices need to be manually approved.
+**Solution**: Go back to your `/setup` wizard page, click the **Approve Pairing** button on the right side, and approve the pending connection request.
+
+### 🖥️ How do I access the Terminal UI (TUI)?
+
+If you prefer a hacker-style terminal interface over the web dashboard, you can access the OpenClaw TUI! Ensure you have set the `ENABLE_WEB_TUI` to True in Railway Variables. You can access the TUI at /tui.
+
+### 🔌 How do I add more channels (Telegram/Discord) later?
+
+You have two easy options if you skipped adding channels during your initial configuration:
+1. **From the Dashboard**: Open your main OpenClaw UI, navigate to the config/settings section, and paste your tokens directly.
+2. **From the Setup Wizard**: Revisit your `/setup` page, enter the new bot tokens in the Channels section, and hit "Run Setup" again to smoothly update your configuration.
+
+---
+
+## 🤝 Found an Issue? Need Help?
+
+Notice a bug with this Railway template (like API key errors, UI glitches, or broken deployment flows)? 
+
+👉 **[Raise an issue on GitHub here!](https://github.com/praveen-ks-2001/openclaw-railway-template-enhanced/issues)**
+
+We actively monitor feedback to ensure your self-hosted AI agents run smoothly.
 
