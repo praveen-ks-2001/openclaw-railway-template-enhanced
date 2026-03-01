@@ -19,15 +19,10 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN corepack enable && pnpm install --frozen-lockfile --prod
 
-# Keep browsers inside the installed package location (avoids cache path issues)
-ENV PLAYWRIGHT_BROWSERS_PATH=0
-
-# Install Chromium + required OS deps for Playwright (must run as root)
-RUN pnpm exec playwright install --with-deps chromium
-
 COPY src ./src
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
+
 
 RUN useradd -m -s /bin/bash openclaw \
   && chown -R openclaw:openclaw /app \
