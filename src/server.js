@@ -1040,6 +1040,200 @@ proxy.on("proxyReqWs", (proxyReq, req, socket, options, head) => {
   proxyReq.setHeader("Origin", GATEWAY_TARGET);
 });
 
+// ─── Agents Dashboard ───────────────────────────────────────────────
+
+app.get("/agents", requireSetupAuth, (_req, res) => {
+  if (!isConfigured()) return res.redirect("/setup");
+  res.sendFile(path.join(process.cwd(), "src", "public", "agents.html"));
+});
+
+app.get("/agents/api/overview", requireSetupAuth, async (_req, res) => {
+  try {
+    const cfgFile = configPath();
+    let config = {};
+    if (fs.existsSync(cfgFile)) {
+      try {
+        config = JSON.parse(fs.readFileSync(cfgFile, "utf8"));
+      } catch {}
+    }
+
+    // Extract channels, redact secrets
+    const channels = {};
+    if (config.channels) {
+      for (const [name, cfg] of Object.entries(config.channels)) {
+        channels[name] = {
+          enabled: cfg.enabled ?? false,
+          ...Object.fromEntries(
+            Object.entries(cfg).filter(
+              ([k]) => !/(token|key|secret|password)/i.test(k),
+            ),
+          ),
+          hasToken: Boolean(cfg.token || cfg.botToken || cfg.appToken),
+        };
+      }
+    }
+
+    // Auth/provider info (redact secrets)
+    const auth = {};
+    if (config.auth) {
+      for (const [provider, cfg] of Object.entries(config.auth)) {
+        if (typeof cfg === "object" && cfg !== null) {
+          auth[provider] = {
+            configured: true,
+            ...Object.fromEntries(
+              Object.entries(cfg).filter(
+                ([k]) => !/(token|key|secret|password)/i.test(k),
+              ),
+            ),
+          };
+        } else {
+          auth[provider] = { configured: true };
+        }
+      }
+    }
+
+    const model = config.model || config.defaultModel || null;
+
+    const gatewayConfig = config.gateway || {};
+
+    const { version } = await getOpenclawInfo();
+
+    // Build a flat summary of top-level config keys (for the raw view)
+    const configKeys = Object.keys(config);
+
+    res.json({
+      ok: true,
+      openclawVersion: version,
+      channels,
+      auth,
+      model,
+      gatewayConfig: {
+        bind: gatewayConfig.bind,
+        port: gatewayConfig.port,
+        trustedProxies: gatewayConfig.trustedProxies,
+        controlUi: gatewayConfig.controlUi,
+      },
+      configKeys,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+app.get("/agents/api/status", requireSetupAuth, async (_req, res) => {
+  const gatewayRunning = isGatewayReady();
+  const starting = isGatewayStarting();
+  let gatewayReachable = false;
+
+  if (gatewayRunning) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      const r = await fetch(`${GATEWAY_TARGET}/`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      gatewayReachable = r !== null;
+    } catch {}
+  }
+
+  // Fetch devices if gateway is running
+  let devices = [];
+  if (gatewayRunning) {
+    try {
+      const result = await runCmd(
+        OPENCLAW_NODE,
+        clawArgs([
+          "devices",
+          "list",
+          "--json",
+          "--token",
+          OPENCLAW_GATEWAY_TOKEN,
+        ]),
+      );
+      if (result.code === 0) {
+        try {
+          devices = JSON.parse(result.output);
+        } catch {}
+      }
+    } catch {}
+  }
+
+  res.json({
+    ok: true,
+    configured: isConfigured(),
+    gateway: {
+      running: gatewayRunning,
+      starting,
+      reachable: gatewayReachable,
+      pid: gatewayProc?.pid || null,
+    },
+    devices,
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    nodeVersion: process.version,
+  });
+});
+
+app.get("/agents/api/filesystem", requireSetupAuth, async (_req, res) => {
+  function scanDir(dirPath, maxDepth = 2, currentDepth = 0) {
+    const entries = [];
+    if (!fs.existsSync(dirPath) || currentDepth > maxDepth) return entries;
+    try {
+      const items = fs.readdirSync(dirPath, { withFileTypes: true });
+      for (const item of items) {
+        const fullPath = path.join(dirPath, item.name);
+        const entry = {
+          name: item.name,
+          type: item.isDirectory() ? "directory" : "file",
+        };
+        if (item.isFile()) {
+          try {
+            const stat = fs.statSync(fullPath);
+            entry.size = stat.size;
+            entry.modified = stat.mtime.toISOString();
+          } catch {}
+        }
+        if (item.isDirectory() && currentDepth < maxDepth) {
+          entry.children = scanDir(fullPath, maxDepth, currentDepth + 1);
+        }
+        entries.push(entry);
+      }
+    } catch (err) {
+      entries.push({ name: "(error reading)", error: err.message });
+    }
+    return entries;
+  }
+
+  function totalSize(entries) {
+    let size = 0;
+    for (const e of entries) {
+      if (e.size) size += e.size;
+      if (e.children) size += totalSize(e.children);
+    }
+    return size;
+  }
+
+  const stateEntries = scanDir(STATE_DIR, 1);
+  const workspaceEntries = scanDir(WORKSPACE_DIR, 1);
+
+  res.json({
+    ok: true,
+    stateDir: {
+      path: STATE_DIR,
+      entries: stateEntries,
+      totalSize: totalSize(stateEntries),
+    },
+    workspaceDir: {
+      path: WORKSPACE_DIR,
+      entries: workspaceEntries,
+      totalSize: totalSize(workspaceEntries),
+    },
+  });
+});
+
+// ─── End Agents Dashboard ───────────────────────────────────────────
+
 app.use(async (req, res) => {
   if (!isConfigured() && !req.path.startsWith("/setup")) {
     return res.redirect("/setup");

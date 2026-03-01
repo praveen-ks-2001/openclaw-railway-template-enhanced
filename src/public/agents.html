@@ -1,0 +1,523 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>🦞 OpenClaw — Agents Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style type="text/tailwindcss">
+    @theme {
+      --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+      --color-surface: #09090b;
+      --color-surface-raised: rgba(255, 255, 255, 0.03);
+      --color-surface-overlay: rgba(255, 255, 255, 0.06);
+      --color-border: rgba(255, 255, 255, 0.07);
+      --color-border-muted: rgba(255, 255, 255, 0.04);
+      --color-accent: #e63946;
+      --color-accent-hover: #f04d5a;
+      --color-text-primary: #fafafa;
+      --color-text-secondary: #a1a1aa;
+      --color-text-muted: #52525b;
+      --color-success: #22c55e;
+      --color-warning: #eab308;
+      --color-danger: #ef4444;
+    }
+    [x-cloak] { display: none !important; }
+    body { background: var(--color-surface); }
+
+    body::before {
+      content: ''; position: fixed; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(230,57,70,0.3), transparent);
+      z-index: 100; pointer-events: none;
+    }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+
+    .card {
+      background: var(--color-surface-raised);
+      border: 1px solid var(--color-border-muted);
+      border-radius: 18px; padding: 24px;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+    .card:hover {
+      border-color: var(--color-border);
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.02), 0 8px 32px rgba(0,0,0,0.12);
+    }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 500;
+    }
+    .badge-success { background: rgba(34,197,94,0.1); color: #4ade80; border: 1px solid rgba(34,197,94,0.15); }
+    .badge-warning { background: rgba(234,179,8,0.1); color: #facc15; border: 1px solid rgba(234,179,8,0.15); }
+    .badge-danger  { background: rgba(239,68,68,0.1); color: #f87171; border: 1px solid rgba(239,68,68,0.15); }
+    .badge-muted   { background: rgba(255,255,255,0.04); color: #a1a1aa; border: 1px solid rgba(255,255,255,0.06); }
+
+    .pulse-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+    }
+    .pulse-dot.green  { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,0.4); }
+    .pulse-dot.yellow { background: #eab308; box-shadow: 0 0 8px rgba(234,179,8,0.4); animation: pulse 2s infinite; }
+    .pulse-dot.red    { background: #ef4444; box-shadow: 0 0 8px rgba(239,68,68,0.4); }
+    .pulse-dot.gray   { background: #52525b; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 1s linear infinite; }
+
+    .file-tree { font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; font-size: 13px; }
+    .file-tree-item { padding: 3px 0; display: flex; align-items: center; gap: 8px; }
+    .file-tree-item:hover { color: var(--color-text-primary); }
+
+    .stat-value { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+    .stat-label { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+  </style>
+</head>
+
+<body class="font-sans text-[var(--color-text-secondary)] min-h-screen antialiased">
+<div x-data="agentsDashboard()" x-init="init()" class="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+
+  <!-- Header -->
+  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+    <div>
+      <h1 class="text-2xl font-bold text-[var(--color-text-primary)] flex items-center gap-3">
+        <span class="text-3xl">🦞</span>
+        Agents Dashboard
+      </h1>
+      <p class="text-sm mt-1 text-[var(--color-text-muted)]">
+        Monitor your OpenClaw channels, gateway, and service filesystem
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/setup" class="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors px-3 py-1.5 rounded-lg border border-[var(--color-border-muted)] hover:border-[var(--color-border)]">
+        ← Setup
+      </a>
+      <button @click="refresh()" :disabled="loading"
+        class="text-sm text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] transition-colors px-3 py-1.5 rounded-lg border border-[rgba(230,57,70,0.15)] hover:border-[rgba(230,57,70,0.3)] disabled:opacity-50">
+        <span x-show="!loading">↻ Refresh</span>
+        <span x-show="loading" class="flex items-center gap-2">
+          <svg class="w-3.5 h-3.5 spinner" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          Loading…
+        </span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Error banner -->
+  <div x-show="error" x-cloak class="mb-6 p-4 rounded-xl bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.15)] text-sm text-[#f87171]">
+    <span x-text="error"></span>
+  </div>
+
+  <!-- Quick Stats Row -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+    <div class="card !p-5 text-center">
+      <div class="stat-value text-[var(--color-text-primary)]" x-text="channelCount"></div>
+      <div class="stat-label text-[var(--color-text-muted)] mt-2">Channels</div>
+    </div>
+    <div class="card !p-5 text-center">
+      <div class="stat-value" :class="gatewayOk ? 'text-[#4ade80]' : 'text-[#f87171]'"
+           x-text="gatewayOk ? 'UP' : (status.gateway?.starting ? '...' : 'DOWN')"></div>
+      <div class="stat-label text-[var(--color-text-muted)] mt-2">Gateway</div>
+    </div>
+    <div class="card !p-5 text-center">
+      <div class="stat-value text-[var(--color-text-primary)]" x-text="deviceCount"></div>
+      <div class="stat-label text-[var(--color-text-muted)] mt-2">Devices</div>
+    </div>
+    <div class="card !p-5 text-center">
+      <div class="stat-value text-[var(--color-text-primary)]" x-text="formatUptime(status.uptime)"></div>
+      <div class="stat-label text-[var(--color-text-muted)] mt-2">Uptime</div>
+    </div>
+  </div>
+
+  <!-- Gateway & System Row -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+    <!-- Gateway Status -->
+    <div class="card">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-9 h-9 rounded-xl bg-[rgba(230,57,70,0.08)] flex items-center justify-center text-lg">⚡</div>
+        <h2 class="text-base font-semibold text-[var(--color-text-primary)]">Gateway</h2>
+        <div class="ml-auto">
+          <template x-if="gatewayOk">
+            <span class="badge badge-success"><span class="pulse-dot green"></span> Running</span>
+          </template>
+          <template x-if="status.gateway?.starting">
+            <span class="badge badge-warning"><span class="pulse-dot yellow"></span> Starting</span>
+          </template>
+          <template x-if="!gatewayOk && !status.gateway?.starting">
+            <span class="badge badge-danger"><span class="pulse-dot red"></span> Offline</span>
+          </template>
+        </div>
+      </div>
+      <div class="space-y-3 text-sm">
+        <div class="flex justify-between">
+          <span class="text-[var(--color-text-muted)]">PID</span>
+          <span class="text-[var(--color-text-primary)] font-mono text-xs" x-text="status.gateway?.pid || '—'"></span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-[var(--color-text-muted)]">Reachable</span>
+          <span :class="status.gateway?.reachable ? 'text-[#4ade80]' : 'text-[var(--color-text-muted)]'"
+                x-text="status.gateway?.reachable ? 'Yes' : 'No'"></span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-[var(--color-text-muted)]">OpenClaw Version</span>
+          <span class="text-[var(--color-text-primary)] font-mono text-xs" x-text="overview.openclawVersion || '—'"></span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-[var(--color-text-muted)]">Node.js</span>
+          <span class="text-[var(--color-text-primary)] font-mono text-xs" x-text="status.nodeVersion || '—'"></span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-[var(--color-text-muted)]">Model</span>
+          <span class="text-[var(--color-text-primary)]" x-text="overview.model || '(default)'"></span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-[var(--color-text-muted)]">Memory (RSS)</span>
+          <span class="text-[var(--color-text-primary)] font-mono text-xs" x-text="formatBytes(status.memory?.rss)"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Auth Providers -->
+    <div class="card">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-9 h-9 rounded-xl bg-[rgba(230,57,70,0.08)] flex items-center justify-center text-lg">🔑</div>
+        <h2 class="text-base font-semibold text-[var(--color-text-primary)]">Auth Providers</h2>
+      </div>
+      <template x-if="Object.keys(overview.auth || {}).length === 0">
+        <p class="text-sm text-[var(--color-text-muted)] italic">No auth providers configured in config file.</p>
+      </template>
+      <div class="space-y-3">
+        <template x-for="(cfg, name) in (overview.auth || {})" :key="name">
+          <div class="flex items-center justify-between p-3 rounded-xl bg-[var(--color-surface-overlay)]">
+            <div class="flex items-center gap-3">
+              <span class="text-base" x-text="providerIcon(name)"></span>
+              <div>
+                <div class="text-sm font-medium text-[var(--color-text-primary)] capitalize" x-text="name"></div>
+              </div>
+            </div>
+            <span class="badge badge-success">Configured</span>
+          </div>
+        </template>
+      </div>
+      <template x-if="overview.configKeys && overview.configKeys.length > 0">
+        <div class="mt-5 pt-4 border-t border-[var(--color-border-muted)]">
+          <p class="text-xs text-[var(--color-text-muted)] mb-2">Config sections:</p>
+          <div class="flex flex-wrap gap-1.5">
+            <template x-for="key in overview.configKeys" :key="key">
+              <span class="text-xs font-mono px-2 py-0.5 rounded-md bg-[var(--color-surface-overlay)] text-[var(--color-text-muted)]" x-text="key"></span>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- Channels (Agents) -->
+  <div class="card mb-6">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-9 h-9 rounded-xl bg-[rgba(230,57,70,0.08)] flex items-center justify-center text-lg">📡</div>
+      <h2 class="text-base font-semibold text-[var(--color-text-primary)]">Configured Channels</h2>
+      <span class="badge badge-muted ml-auto" x-text="channelCount + ' total'"></span>
+    </div>
+    <template x-if="channelCount === 0">
+      <div class="text-center py-10">
+        <p class="text-4xl mb-3">📭</p>
+        <p class="text-sm text-[var(--color-text-muted)]">No channels configured yet.</p>
+        <a href="/setup" class="inline-block mt-3 text-sm text-[var(--color-accent)] hover:text-[var(--color-accent-hover)]">Go to Setup →</a>
+      </div>
+    </template>
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <template x-for="(cfg, name) in (overview.channels || {})" :key="name">
+        <div class="p-5 rounded-xl bg-[var(--color-surface-overlay)] border border-[var(--color-border-muted)] hover:border-[var(--color-border)] transition-all">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+              <span class="text-2xl" x-text="channelIcon(name)"></span>
+              <h3 class="text-sm font-semibold text-[var(--color-text-primary)] capitalize" x-text="name"></h3>
+            </div>
+            <template x-if="cfg.enabled">
+              <span class="badge badge-success"><span class="pulse-dot green"></span> Active</span>
+            </template>
+            <template x-if="!cfg.enabled">
+              <span class="badge badge-muted"><span class="pulse-dot gray"></span> Disabled</span>
+            </template>
+          </div>
+          <div class="space-y-2 text-xs">
+            <template x-for="(val, key) in channelDetails(cfg)" :key="key">
+              <div class="flex justify-between gap-2">
+                <span class="text-[var(--color-text-muted)] shrink-0" x-text="key"></span>
+                <span class="text-[var(--color-text-secondary)] truncate text-right font-mono" x-text="String(val)"></span>
+              </div>
+            </template>
+            <div class="flex justify-between gap-2">
+              <span class="text-[var(--color-text-muted)]">Credentials</span>
+              <span :class="cfg.hasToken ? 'text-[#4ade80]' : 'text-[var(--color-text-muted)]'"
+                    x-text="cfg.hasToken ? '✓ Present' : '✗ Missing'"></span>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- Devices -->
+  <div class="card mb-6">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-9 h-9 rounded-xl bg-[rgba(230,57,70,0.08)] flex items-center justify-center text-lg">📱</div>
+      <h2 class="text-base font-semibold text-[var(--color-text-primary)]">Paired Devices</h2>
+      <span class="badge badge-muted ml-auto" x-text="deviceCount + ' device(s)'"></span>
+    </div>
+    <template x-if="!Array.isArray(status.devices) || status.devices.length === 0">
+      <p class="text-sm text-[var(--color-text-muted)] italic">No devices paired or gateway not running.</p>
+    </template>
+    <div class="space-y-3">
+      <template x-for="(dev, i) in (status.devices || [])" :key="i">
+        <div class="flex items-center justify-between p-3 rounded-xl bg-[var(--color-surface-overlay)]">
+          <div class="flex items-center gap-3">
+            <span class="text-base">💻</span>
+            <div>
+              <div class="text-sm font-medium text-[var(--color-text-primary)]" x-text="dev.name || dev.id || ('Device ' + (i+1))"></div>
+              <div class="text-xs text-[var(--color-text-muted)]" x-text="dev.type || dev.status || ''"></div>
+            </div>
+          </div>
+          <template x-if="dev.connected || dev.status === 'connected'">
+            <span class="badge badge-success"><span class="pulse-dot green"></span> Connected</span>
+          </template>
+          <template x-if="dev.status === 'pending'">
+            <span class="badge badge-warning"><span class="pulse-dot yellow"></span> Pending</span>
+          </template>
+          <template x-if="!dev.connected && dev.status !== 'connected' && dev.status !== 'pending'">
+            <span class="badge badge-muted" x-text="dev.status || 'Unknown'"></span>
+          </template>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- Filesystem Summary -->
+  <div class="card mb-6">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-9 h-9 rounded-xl bg-[rgba(230,57,70,0.08)] flex items-center justify-center text-lg">📂</div>
+      <h2 class="text-base font-semibold text-[var(--color-text-primary)]">Service Filesystem</h2>
+      <button @click="showFs = !showFs"
+        class="ml-auto text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors">
+        <span x-text="showFs ? 'Collapse' : 'Expand'"></span>
+      </button>
+    </div>
+
+    <!-- Summary line -->
+    <div class="flex flex-col sm:flex-row gap-4 mb-4 text-sm">
+      <div class="flex items-center gap-2">
+        <span class="text-[var(--color-text-muted)]">State dir:</span>
+        <span class="font-mono text-xs text-[var(--color-text-secondary)]" x-text="fs.stateDir?.path || '—'"></span>
+        <span class="badge badge-muted" x-text="formatBytes(fs.stateDir?.totalSize)"></span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-[var(--color-text-muted)]">Workspace:</span>
+        <span class="font-mono text-xs text-[var(--color-text-secondary)]" x-text="fs.workspaceDir?.path || '—'"></span>
+        <span class="badge badge-muted" x-text="formatBytes(fs.workspaceDir?.totalSize)"></span>
+      </div>
+    </div>
+
+    <div x-show="showFs" x-cloak x-transition class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- State dir tree -->
+      <div>
+        <h3 class="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-3">State Directory</h3>
+        <div class="file-tree text-[var(--color-text-secondary)] space-y-0.5">
+          <template x-if="!fs.stateDir?.entries?.length">
+            <p class="text-[var(--color-text-muted)] italic text-xs">Empty or unavailable</p>
+          </template>
+          <template x-for="entry in (fs.stateDir?.entries || [])" :key="entry.name">
+            <div>
+              <div class="file-tree-item">
+                <span x-text="entry.type === 'directory' ? '📁' : '📄'" class="text-xs"></span>
+                <span x-text="entry.name"></span>
+                <span x-show="entry.size !== undefined" class="text-[var(--color-text-muted)] text-[11px] ml-auto" x-text="formatBytes(entry.size)"></span>
+              </div>
+              <template x-if="entry.children && entry.children.length > 0">
+                <div class="ml-6 border-l border-[var(--color-border-muted)] pl-3">
+                  <template x-for="child in entry.children" :key="child.name">
+                    <div class="file-tree-item">
+                      <span x-text="child.type === 'directory' ? '📁' : '📄'" class="text-xs"></span>
+                      <span x-text="child.name"></span>
+                      <span x-show="child.size !== undefined" class="text-[var(--color-text-muted)] text-[11px] ml-auto" x-text="formatBytes(child.size)"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Workspace dir tree -->
+      <div>
+        <h3 class="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-3">Workspace Directory</h3>
+        <div class="file-tree text-[var(--color-text-secondary)] space-y-0.5">
+          <template x-if="!fs.workspaceDir?.entries?.length">
+            <p class="text-[var(--color-text-muted)] italic text-xs">Empty or unavailable</p>
+          </template>
+          <template x-for="entry in (fs.workspaceDir?.entries || [])" :key="entry.name">
+            <div>
+              <div class="file-tree-item">
+                <span x-text="entry.type === 'directory' ? '📁' : '📄'" class="text-xs"></span>
+                <span x-text="entry.name"></span>
+                <span x-show="entry.size !== undefined" class="text-[var(--color-text-muted)] text-[11px] ml-auto" x-text="formatBytes(entry.size)"></span>
+              </div>
+              <template x-if="entry.children && entry.children.length > 0">
+                <div class="ml-6 border-l border-[var(--color-border-muted)] pl-3">
+                  <template x-for="child in entry.children" :key="child.name">
+                    <div class="file-tree-item">
+                      <span x-text="child.type === 'directory' ? '📁' : '📄'" class="text-xs"></span>
+                      <span x-text="child.name"></span>
+                      <span x-show="child.size !== undefined" class="text-[var(--color-text-muted)] text-[11px] ml-auto" x-text="formatBytes(child.size)"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Auto-refresh indicator -->
+  <div class="text-center text-xs text-[var(--color-text-muted)] pb-8">
+    Auto-refreshes every 30s · <span x-text="lastRefresh"></span>
+  </div>
+
+</div>
+
+<script>
+function agentsDashboard() {
+  return {
+    loading: false,
+    error: null,
+    overview: {},
+    status: {},
+    fs: {},
+    showFs: false,
+    lastRefresh: '',
+    _interval: null,
+
+    async init() {
+      await this.refresh();
+      // Auto-refresh every 30s
+      this._interval = setInterval(() => this.refresh(), 30000);
+    },
+
+    async httpJson(url) {
+      const res = await fetch(url, { credentials: 'same-origin' });
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error('HTTP ' + res.status + ': ' + (t || res.statusText));
+      }
+      return res.json();
+    },
+
+    async refresh() {
+      this.loading = true;
+      this.error = null;
+      try {
+        const [overview, status, fs] = await Promise.all([
+          this.httpJson('/agents/api/overview'),
+          this.httpJson('/agents/api/status'),
+          this.httpJson('/agents/api/filesystem'),
+        ]);
+        this.overview = overview;
+        this.status = status;
+        this.fs = fs;
+        this.lastRefresh = new Date().toLocaleTimeString();
+      } catch (err) {
+        this.error = err.message;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    get channelCount() {
+      return Object.keys(this.overview.channels || {}).length;
+    },
+
+    get deviceCount() {
+      return Array.isArray(this.status.devices) ? this.status.devices.length : 0;
+    },
+
+    get gatewayOk() {
+      return this.status.gateway?.running && this.status.gateway?.reachable;
+    },
+
+    channelIcon(name) {
+      const map = {
+        telegram: '✈️',
+        discord: '🎮',
+        slack: '💬',
+        whatsapp: '📱',
+        matrix: '🔗',
+        irc: '💻',
+      };
+      return map[name.toLowerCase()] || '📡';
+    },
+
+    providerIcon(name) {
+      const map = {
+        openai: '🤖',
+        anthropic: '🧠',
+        google: '🔍',
+        openrouter: '🌐',
+        copilot: '🐙',
+        moonshot: '🌙',
+        qwen: '🌸',
+        minimax: '⚡',
+        synthetic: '🧪',
+        gemini: '💎',
+      };
+      return map[name.toLowerCase()] || '🔑';
+    },
+
+    channelDetails(cfg) {
+      // Return non-boolean, non-internal fields for display
+      const skip = new Set(['enabled', 'hasToken', 'token', 'botToken', 'appToken']);
+      const out = {};
+      for (const [k, v] of Object.entries(cfg)) {
+        if (skip.has(k)) continue;
+        if (typeof v === 'object') continue;
+        out[k] = v;
+      }
+      return out;
+    },
+
+    formatBytes(bytes) {
+      if (bytes === undefined || bytes === null) return '—';
+      if (bytes === 0) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+      const val = bytes / Math.pow(1024, i);
+      return val.toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
+    },
+
+    formatUptime(seconds) {
+      if (!seconds) return '—';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      if (h > 0) return h + 'h ' + m + 'm';
+      if (m > 0) return m + 'm';
+      return Math.floor(seconds) + 's';
+    },
+  };
+}
+</script>
+</body>
+</html>
