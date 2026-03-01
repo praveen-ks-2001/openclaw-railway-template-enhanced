@@ -1101,12 +1101,35 @@ app.get("/agents/api/overview", requireSetupAuth, async (_req, res) => {
     // Build a flat summary of top-level config keys (for the raw view)
     const configKeys = Object.keys(config);
 
+    // Extract agents config (defaults, models, concurrency, etc.)
+    const agentsConfig = config.agents || {};
+    const agentsDefaults = agentsConfig.defaults || {};
+    const agents = {
+      model: agentsDefaults.model || {},
+      models: agentsDefaults.models || {},
+      workspace: agentsDefaults.workspace || null,
+      compaction: agentsDefaults.compaction || {},
+      maxConcurrent: agentsDefaults.maxConcurrent ?? null,
+      subagents: agentsDefaults.subagents || {},
+    };
+
+    // Extract session, messages, commands, skills config
+    const session = config.session || {};
+    const messages = config.messages || {};
+    const commands = config.commands || {};
+    const skills = config.skills || {};
+
     res.json({
       ok: true,
       openclawVersion: version,
       channels,
       auth,
       model,
+      agents,
+      session,
+      messages,
+      commands,
+      skills,
       gatewayConfig: {
         bind: gatewayConfig.bind,
         port: gatewayConfig.port,

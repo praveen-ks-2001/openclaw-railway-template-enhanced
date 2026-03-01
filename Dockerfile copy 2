@@ -9,15 +9,9 @@ RUN apt-get update \
     gosu \
     procps \
     python3 \
-    python3-pip \
-    python3-venv \
     build-essential \
     zip \
   && rm -rf /var/lib/apt/lists/*
-
-# Install pytrends (Google Trends unofficial API client)
-# Use --break-system-packages because Debian bookworm may enforce externally-managed Python envs.
-RUN python3 -m pip install --no-cache-dir --break-system-packages pytrends
 
 RUN npm install -g openclaw@latest
 

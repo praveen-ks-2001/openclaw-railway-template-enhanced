@@ -60,6 +60,7 @@
     .badge-warning { background: rgba(234,179,8,0.1); color: #facc15; border: 1px solid rgba(234,179,8,0.15); }
     .badge-danger  { background: rgba(239,68,68,0.1); color: #f87171; border: 1px solid rgba(239,68,68,0.15); }
     .badge-muted   { background: rgba(255,255,255,0.04); color: #a1a1aa; border: 1px solid rgba(255,255,255,0.06); }
+    .badge-accent  { background: rgba(230,57,70,0.1); color: #f04d5a; border: 1px solid rgba(230,57,70,0.15); }
 
     .pulse-dot {
       width: 8px; height: 8px; border-radius: 50%;
@@ -76,10 +77,32 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner { animation: spin 1s linear infinite; }
 
+    /* Agent avatar ring */
+    @keyframes ring-rotate { to { transform: rotate(360deg); } }
+    @keyframes ring-pulse {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
+    .agent-ring-active {
+      animation: ring-rotate 8s linear infinite;
+    }
+    .agent-ring-pulse {
+      animation: ring-pulse 3s ease-in-out infinite;
+    }
+
+    /* Flowing connection line */
+    @keyframes flow {
+      0% { stroke-dashoffset: 20; }
+      100% { stroke-dashoffset: 0; }
+    }
+    .flow-line {
+      stroke-dasharray: 5,5;
+      animation: flow 1s linear infinite;
+    }
+
     .file-tree { font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; font-size: 13px; }
     .file-tree-item { padding: 3px 0; display: flex; align-items: center; gap: 8px; }
     .file-tree-item:hover { color: var(--color-text-primary); }
-
     .stat-value { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
     .stat-label { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
   </style>
@@ -96,7 +119,7 @@
         Agents Dashboard
       </h1>
       <p class="text-sm mt-1 text-[var(--color-text-muted)]">
-        Monitor your OpenClaw channels, gateway, and service filesystem
+        Visual overview of your OpenClaw agents, channels &amp; system
       </p>
     </div>
     <div class="flex items-center gap-3">
@@ -119,31 +142,272 @@
     <span x-text="error"></span>
   </div>
 
-  <!-- Quick Stats Row -->
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-    <div class="card !p-5 text-center">
-      <div class="stat-value text-[var(--color-text-primary)]" x-text="channelCount"></div>
-      <div class="stat-label text-[var(--color-text-muted)] mt-2">Channels</div>
-    </div>
-    <div class="card !p-5 text-center">
-      <div class="stat-value" :class="gatewayOk ? 'text-[#4ade80]' : 'text-[#f87171]'"
-           x-text="gatewayOk ? 'UP' : (status.gateway?.starting ? '...' : 'DOWN')"></div>
-      <div class="stat-label text-[var(--color-text-muted)] mt-2">Gateway</div>
-    </div>
-    <div class="card !p-5 text-center">
-      <div class="stat-value text-[var(--color-text-primary)]" x-text="deviceCount"></div>
-      <div class="stat-label text-[var(--color-text-muted)] mt-2">Devices</div>
-    </div>
-    <div class="card !p-5 text-center">
-      <div class="stat-value text-[var(--color-text-primary)]" x-text="formatUptime(status.uptime)"></div>
-      <div class="stat-label text-[var(--color-text-muted)] mt-2">Uptime</div>
+  <!-- ═══════════════════════════════════════════════════════════
+       MAIN AGENT VISUAL — big hero card with avatar + status
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="card mb-8 relative overflow-hidden">
+    <!-- Subtle gradient bg -->
+    <div class="absolute inset-0 opacity-30 pointer-events-none"
+         style="background: radial-gradient(ellipse at 30% 20%, rgba(230,57,70,0.08) 0%, transparent 60%);"></div>
+
+    <div class="relative flex flex-col lg:flex-row gap-8 items-start lg:items-center">
+
+      <!-- Agent Avatar -->
+      <div class="flex flex-col items-center gap-3 min-w-[160px]">
+        <div class="relative">
+          <!-- Outer animated ring -->
+          <svg class="w-28 h-28" :class="gatewayOk ? 'agent-ring-active' : ''" viewBox="0 0 120 120">
+            <defs>
+              <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" :stop-color="gatewayOk ? '#22c55e' : '#52525b'" stop-opacity="0.8"/>
+                <stop offset="50%" :stop-color="gatewayOk ? '#4ade80' : '#71717a'" stop-opacity="0.2"/>
+                <stop offset="100%" :stop-color="gatewayOk ? '#22c55e' : '#52525b'" stop-opacity="0.8"/>
+              </linearGradient>
+            </defs>
+            <circle cx="60" cy="60" r="55" fill="none" stroke="url(#ringGrad)" stroke-width="2"
+                    stroke-dasharray="8,4" :class="gatewayOk ? '' : ''" />
+          </svg>
+          <!-- Inner circle with emoji -->
+          <div class="absolute inset-0 flex items-center justify-center">
+            <div class="w-20 h-20 rounded-full flex items-center justify-center text-4xl"
+                 :class="gatewayOk ? 'bg-[rgba(34,197,94,0.08)] border-2 border-[rgba(34,197,94,0.2)]'
+                                    : 'bg-[rgba(82,82,91,0.15)] border-2 border-[rgba(82,82,91,0.2)]'">
+              🦞
+            </div>
+          </div>
+        </div>
+        <div class="text-center">
+          <div class="text-[15px] font-bold text-[var(--color-text-primary)]">Main Agent</div>
+          <template x-if="gatewayOk">
+            <span class="badge badge-success mt-1"><span class="pulse-dot green"></span> Running</span>
+          </template>
+          <template x-if="status.gateway?.starting && !gatewayOk">
+            <span class="badge badge-warning mt-1"><span class="pulse-dot yellow"></span> Starting</span>
+          </template>
+          <template x-if="!gatewayOk && !status.gateway?.starting">
+            <span class="badge badge-danger mt-1"><span class="pulse-dot red"></span> Offline</span>
+          </template>
+        </div>
+      </div>
+
+      <!-- Agent Details -->
+      <div class="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3 text-sm">
+        <div>
+          <span class="text-[var(--color-text-muted)] text-xs uppercase tracking-wider">Primary Model</span>
+          <div class="text-[var(--color-text-primary)] font-semibold mt-0.5"
+               x-text="overview.agents?.model?.primary || overview.model || '(default)'"></div>
+        </div>
+        <div>
+          <span class="text-[var(--color-text-muted)] text-xs uppercase tracking-wider">Workspace</span>
+          <div class="text-[var(--color-text-primary)] font-mono text-xs mt-0.5"
+               x-text="overview.agents?.workspace || '—'"></div>
+        </div>
+        <div>
+          <span class="text-[var(--color-text-muted)] text-xs uppercase tracking-wider">Max Concurrent</span>
+          <div class="text-[var(--color-text-primary)] font-semibold mt-0.5"
+               x-text="overview.agents?.maxConcurrent ?? '—'"></div>
+        </div>
+        <div>
+          <span class="text-[var(--color-text-muted)] text-xs uppercase tracking-wider">Subagent Concurrency</span>
+          <div class="text-[var(--color-text-primary)] font-semibold mt-0.5"
+               x-text="overview.agents?.subagents?.maxConcurrent ?? '—'"></div>
+        </div>
+        <div>
+          <span class="text-[var(--color-text-muted)] text-xs uppercase tracking-wider">Compaction</span>
+          <div class="text-[var(--color-text-primary)] mt-0.5"
+               x-text="overview.agents?.compaction?.mode || '—'"></div>
+        </div>
+        <div>
+          <span class="text-[var(--color-text-muted)] text-xs uppercase tracking-wider">Version</span>
+          <div class="text-[var(--color-text-primary)] font-mono text-xs mt-0.5"
+               x-text="overview.openclawVersion || '—'"></div>
+        </div>
+        <div>
+          <span class="text-[var(--color-text-muted)] text-xs uppercase tracking-wider">Session Scope</span>
+          <div class="text-[var(--color-text-primary)] mt-0.5"
+               x-text="overview.session?.dmScope || '—'"></div>
+        </div>
+        <div>
+          <span class="text-[var(--color-text-muted)] text-xs uppercase tracking-wider">Memory (RSS)</span>
+          <div class="text-[var(--color-text-primary)] font-mono text-xs mt-0.5"
+               x-text="formatBytes(status.memory?.rss)"></div>
+        </div>
+      </div>
+
+      <!-- Model aliases sidebar -->
+      <div class="lg:border-l lg:border-[var(--color-border-muted)] lg:pl-8 min-w-[160px]">
+        <div class="text-xs text-[var(--color-text-muted)] uppercase tracking-wider mb-3">Models</div>
+        <div class="space-y-2">
+          <template x-for="(cfg, id) in (overview.agents?.models || {})" :key="id">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-[var(--color-accent)]"></span>
+              <div>
+                <div class="text-xs text-[var(--color-text-primary)] font-medium" x-text="cfg.alias || id"></div>
+                <div class="text-[11px] text-[var(--color-text-muted)] font-mono" x-text="id"></div>
+              </div>
+            </div>
+          </template>
+          <template x-if="Object.keys(overview.agents?.models || {}).length === 0">
+            <span class="text-xs text-[var(--color-text-muted)] italic">No model aliases</span>
+          </template>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- Gateway & System Row -->
+  <!-- ═══════════════════════════════════════════════════════════
+       CHANNEL AGENTS — visual cards with connection lines
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="mb-8">
+    <div class="flex items-center gap-3 mb-5">
+      <h2 class="text-lg font-bold text-[var(--color-text-primary)]">Channel Agents</h2>
+      <span class="badge badge-muted" x-text="channelCount + ' connected'"></span>
+    </div>
+
+    <template x-if="channelCount === 0">
+      <div class="card text-center py-14">
+        <p class="text-5xl mb-4">📭</p>
+        <p class="text-[var(--color-text-muted)]">No channels configured yet.</p>
+        <a href="/setup" class="inline-block mt-3 text-sm text-[var(--color-accent)] hover:text-[var(--color-accent-hover)]">Go to Setup →</a>
+      </div>
+    </template>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+      <template x-for="(cfg, name) in (overview.channels || {})" :key="name">
+        <div class="card !p-0 overflow-hidden group">
+          <!-- Channel header with colored accent -->
+          <div class="p-5 pb-4 relative">
+            <!-- Top accent bar -->
+            <div class="absolute top-0 left-0 right-0 h-[3px]"
+                 :style="'background: ' + channelColor(name)"></div>
+
+            <div class="flex items-start justify-between mb-4">
+              <div class="flex items-center gap-4">
+                <!-- Channel Avatar -->
+                <div class="relative">
+                  <div class="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl transition-transform group-hover:scale-105"
+                       :style="'background: ' + channelColor(name) + '15; border: 1px solid ' + channelColor(name) + '30'">
+                    <span x-text="channelIcon(name)"></span>
+                  </div>
+                  <!-- Status pip -->
+                  <div class="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center"
+                       :class="cfg.enabled ? 'bg-[rgba(34,197,94,0.15)] border border-[rgba(34,197,94,0.3)]'
+                                            : 'bg-[rgba(82,82,91,0.2)] border border-[rgba(82,82,91,0.3)]'">
+                    <span class="pulse-dot" :class="cfg.enabled && gatewayOk ? 'green' : (cfg.enabled ? 'yellow' : 'gray')"
+                          style="width:8px;height:8px;"></span>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 class="text-base font-bold text-[var(--color-text-primary)] capitalize" x-text="name"></h3>
+                  <template x-if="cfg.enabled && gatewayOk">
+                    <span class="text-xs text-[#4ade80] font-medium">● Active — Listening</span>
+                  </template>
+                  <template x-if="cfg.enabled && !gatewayOk">
+                    <span class="text-xs text-[#facc15] font-medium">● Enabled — Gateway Down</span>
+                  </template>
+                  <template x-if="!cfg.enabled">
+                    <span class="text-xs text-[var(--color-text-muted)] font-medium">○ Disabled</span>
+                  </template>
+                </div>
+              </div>
+            </div>
+
+            <!-- Channel properties -->
+            <div class="grid grid-cols-2 gap-x-6 gap-y-2">
+              <template x-for="(val, key) in channelDetails(cfg)" :key="key">
+                <div class="flex flex-col">
+                  <span class="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider" x-text="key"></span>
+                  <span class="text-xs text-[var(--color-text-secondary)] font-medium" x-text="String(val)"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Bottom bar -->
+          <div class="px-5 py-3 bg-[var(--color-surface-overlay)] border-t border-[var(--color-border-muted)] flex items-center justify-between">
+            <span class="text-[11px] text-[var(--color-text-muted)]">
+              Credentials: <span :class="cfg.hasToken ? 'text-[#4ade80]' : 'text-[#f87171]'"
+                                  x-text="cfg.hasToken ? '✓ Present' : '✗ Missing'"></span>
+            </span>
+            <template x-if="cfg.enabled && gatewayOk">
+              <span class="badge badge-success !py-0.5 !text-[10px]">
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+                Live
+              </span>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SUBAGENTS VISUAL
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="card mb-8" x-show="overview.agents?.maxConcurrent">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-9 h-9 rounded-xl bg-[rgba(230,57,70,0.08)] flex items-center justify-center text-lg">🤖</div>
+      <h2 class="text-base font-semibold text-[var(--color-text-primary)]">Agent Slots</h2>
+      <span class="text-xs text-[var(--color-text-muted)]">Concurrency pool visualization</span>
+    </div>
+
+    <!-- Main agent slots -->
+    <div class="mb-5">
+      <div class="text-xs text-[var(--color-text-muted)] uppercase tracking-wider mb-3">
+        Main Agents <span class="text-[var(--color-text-primary)] font-semibold" x-text="'(' + (overview.agents?.maxConcurrent || 0) + ' max)'"></span>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <template x-for="i in (overview.agents?.maxConcurrent || 0)" :key="'main-'+i">
+          <div class="relative group/slot">
+            <div class="w-14 h-14 rounded-xl border-2 flex items-center justify-center text-lg transition-all"
+                 :class="i === 1 && gatewayOk
+                   ? 'bg-[rgba(34,197,94,0.06)] border-[rgba(34,197,94,0.25)] text-[#4ade80]'
+                   : 'bg-[var(--color-surface-overlay)] border-[var(--color-border-muted)] text-[var(--color-text-muted)]'">
+              <template x-if="i === 1 && gatewayOk">
+                <span>🦞</span>
+              </template>
+              <template x-if="!(i === 1 && gatewayOk)">
+                <span class="text-sm font-mono opacity-40" x-text="'#' + i"></span>
+              </template>
+            </div>
+            <!-- Tooltip -->
+            <div class="absolute -top-8 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-lg bg-[#27272a] text-[10px] text-[var(--color-text-primary)] font-medium whitespace-nowrap opacity-0 group-hover/slot:opacity-100 transition-opacity pointer-events-none z-10">
+              <span x-text="i === 1 && gatewayOk ? 'Primary — Active' : 'Slot #' + i + ' — Idle'"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Subagent slots -->
+    <div>
+      <div class="text-xs text-[var(--color-text-muted)] uppercase tracking-wider mb-3">
+        Sub-agents <span class="text-[var(--color-text-primary)] font-semibold" x-text="'(' + (overview.agents?.subagents?.maxConcurrent || 0) + ' max)'"></span>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <template x-for="i in (overview.agents?.subagents?.maxConcurrent || 0)" :key="'sub-'+i">
+          <div class="relative group/slot">
+            <div class="w-10 h-10 rounded-lg border flex items-center justify-center text-xs transition-all bg-[var(--color-surface-overlay)] border-[var(--color-border-muted)] text-[var(--color-text-muted)]">
+              <span class="font-mono opacity-40" x-text="'s' + i"></span>
+            </div>
+            <div class="absolute -top-8 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-lg bg-[#27272a] text-[10px] text-[var(--color-text-primary)] font-medium whitespace-nowrap opacity-0 group-hover/slot:opacity-100 transition-opacity pointer-events-none z-10">
+              <span x-text="'Subagent slot #' + i + ' — Idle'"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       COMPACT INFO GRID: Gateway / Devices / Commands / Skills
+       ═══════════════════════════════════════════════════════════ -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
 
-    <!-- Gateway Status -->
+    <!-- Gateway & System -->
     <div class="card">
       <div class="flex items-center gap-3 mb-5">
         <div class="w-9 h-9 rounded-xl bg-[rgba(230,57,70,0.08)] flex items-center justify-center text-lg">⚡</div>
@@ -161,31 +425,59 @@
         </div>
       </div>
       <div class="space-y-3 text-sm">
-        <div class="flex justify-between">
-          <span class="text-[var(--color-text-muted)]">PID</span>
-          <span class="text-[var(--color-text-primary)] font-mono text-xs" x-text="status.gateway?.pid || '—'"></span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-[var(--color-text-muted)]">Reachable</span>
-          <span :class="status.gateway?.reachable ? 'text-[#4ade80]' : 'text-[var(--color-text-muted)]'"
-                x-text="status.gateway?.reachable ? 'Yes' : 'No'"></span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-[var(--color-text-muted)]">OpenClaw Version</span>
-          <span class="text-[var(--color-text-primary)] font-mono text-xs" x-text="overview.openclawVersion || '—'"></span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-[var(--color-text-muted)]">Node.js</span>
-          <span class="text-[var(--color-text-primary)] font-mono text-xs" x-text="status.nodeVersion || '—'"></span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-[var(--color-text-muted)]">Model</span>
-          <span class="text-[var(--color-text-primary)]" x-text="overview.model || '(default)'"></span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-[var(--color-text-muted)]">Memory (RSS)</span>
-          <span class="text-[var(--color-text-primary)] font-mono text-xs" x-text="formatBytes(status.memory?.rss)"></span>
-        </div>
+        <div class="flex justify-between"><span class="text-[var(--color-text-muted)]">PID</span><span class="text-[var(--color-text-primary)] font-mono text-xs" x-text="status.gateway?.pid || '—'"></span></div>
+        <div class="flex justify-between"><span class="text-[var(--color-text-muted)]">Reachable</span><span :class="status.gateway?.reachable ? 'text-[#4ade80]' : 'text-[var(--color-text-muted)]'" x-text="status.gateway?.reachable ? 'Yes' : 'No'"></span></div>
+        <div class="flex justify-between"><span class="text-[var(--color-text-muted)]">Node.js</span><span class="text-[var(--color-text-primary)] font-mono text-xs" x-text="status.nodeVersion || '—'"></span></div>
+        <div class="flex justify-between"><span class="text-[var(--color-text-muted)]">Uptime</span><span class="text-[var(--color-text-primary)]" x-text="formatUptime(status.uptime)"></span></div>
+      </div>
+    </div>
+
+    <!-- Devices -->
+    <div class="card">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-9 h-9 rounded-xl bg-[rgba(230,57,70,0.08)] flex items-center justify-center text-lg">📱</div>
+        <h2 class="text-base font-semibold text-[var(--color-text-primary)]">Paired Devices</h2>
+        <span class="badge badge-muted ml-auto" x-text="deviceCount + ' device(s)'"></span>
+      </div>
+      <template x-if="deviceCount === 0">
+        <p class="text-sm text-[var(--color-text-muted)] italic">No devices paired or gateway not running.</p>
+      </template>
+      <div class="space-y-2">
+        <template x-for="(dev, i) in (status.devices || [])" :key="i">
+          <div class="flex items-center justify-between p-3 rounded-xl bg-[var(--color-surface-overlay)]">
+            <div class="flex items-center gap-3">
+              <span>💻</span>
+              <div>
+                <div class="text-sm font-medium text-[var(--color-text-primary)]" x-text="dev.name || dev.id || ('Device ' + (i+1))"></div>
+                <div class="text-xs text-[var(--color-text-muted)]" x-text="dev.type || dev.status || ''"></div>
+              </div>
+            </div>
+            <template x-if="dev.connected || dev.status === 'connected'">
+              <span class="badge badge-success"><span class="pulse-dot green"></span> Connected</span>
+            </template>
+            <template x-if="dev.status === 'pending'">
+              <span class="badge badge-warning"><span class="pulse-dot yellow"></span> Pending</span>
+            </template>
+            <template x-if="!dev.connected && dev.status !== 'connected' && dev.status !== 'pending'">
+              <span class="badge badge-muted" x-text="dev.status || 'Unknown'"></span>
+            </template>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Commands & Skills -->
+    <div class="card">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-9 h-9 rounded-xl bg-[rgba(230,57,70,0.08)] flex items-center justify-center text-lg">⚙️</div>
+        <h2 class="text-base font-semibold text-[var(--color-text-primary)]">Commands &amp; Skills</h2>
+      </div>
+      <div class="space-y-3 text-sm">
+        <div class="flex justify-between"><span class="text-[var(--color-text-muted)]">Native commands</span><span class="text-[var(--color-text-primary)]" x-text="overview.commands?.native || '—'"></span></div>
+        <div class="flex justify-between"><span class="text-[var(--color-text-muted)]">Native skills</span><span class="text-[var(--color-text-primary)]" x-text="overview.commands?.nativeSkills || '—'"></span></div>
+        <div class="flex justify-between"><span class="text-[var(--color-text-muted)]">Restart allowed</span><span :class="overview.commands?.restart ? 'text-[#4ade80]' : 'text-[var(--color-text-muted)]'" x-text="overview.commands?.restart ? 'Yes' : 'No'"></span></div>
+        <div class="flex justify-between"><span class="text-[var(--color-text-muted)]">Skill node manager</span><span class="text-[var(--color-text-primary)]" x-text="overview.skills?.install?.nodeManager || '—'"></span></div>
+        <div class="flex justify-between"><span class="text-[var(--color-text-muted)]">ACK scope</span><span class="text-[var(--color-text-primary)]" x-text="overview.messages?.ackReactionScope || '—'"></span></div>
       </div>
     </div>
 
@@ -196,27 +488,25 @@
         <h2 class="text-base font-semibold text-[var(--color-text-primary)]">Auth Providers</h2>
       </div>
       <template x-if="Object.keys(overview.auth || {}).length === 0">
-        <p class="text-sm text-[var(--color-text-muted)] italic">No auth providers configured in config file.</p>
+        <p class="text-sm text-[var(--color-text-muted)] italic">No auth providers in config.</p>
       </template>
-      <div class="space-y-3">
+      <div class="space-y-2">
         <template x-for="(cfg, name) in (overview.auth || {})" :key="name">
           <div class="flex items-center justify-between p-3 rounded-xl bg-[var(--color-surface-overlay)]">
             <div class="flex items-center gap-3">
               <span class="text-base" x-text="providerIcon(name)"></span>
-              <div>
-                <div class="text-sm font-medium text-[var(--color-text-primary)] capitalize" x-text="name"></div>
-              </div>
+              <div class="text-sm font-medium text-[var(--color-text-primary)] capitalize" x-text="name"></div>
             </div>
             <span class="badge badge-success">Configured</span>
           </div>
         </template>
       </div>
       <template x-if="overview.configKeys && overview.configKeys.length > 0">
-        <div class="mt-5 pt-4 border-t border-[var(--color-border-muted)]">
-          <p class="text-xs text-[var(--color-text-muted)] mb-2">Config sections:</p>
+        <div class="mt-4 pt-3 border-t border-[var(--color-border-muted)]">
+          <p class="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider mb-2">Config sections</p>
           <div class="flex flex-wrap gap-1.5">
             <template x-for="key in overview.configKeys" :key="key">
-              <span class="text-xs font-mono px-2 py-0.5 rounded-md bg-[var(--color-surface-overlay)] text-[var(--color-text-muted)]" x-text="key"></span>
+              <span class="text-[11px] font-mono px-2 py-0.5 rounded-md bg-[var(--color-surface-overlay)] text-[var(--color-text-muted)]" x-text="key"></span>
             </template>
           </div>
         </div>
@@ -224,121 +514,36 @@
     </div>
   </div>
 
-  <!-- Channels (Agents) -->
-  <div class="card mb-6">
-    <div class="flex items-center gap-3 mb-5">
-      <div class="w-9 h-9 rounded-xl bg-[rgba(230,57,70,0.08)] flex items-center justify-center text-lg">📡</div>
-      <h2 class="text-base font-semibold text-[var(--color-text-primary)]">Configured Channels</h2>
-      <span class="badge badge-muted ml-auto" x-text="channelCount + ' total'"></span>
-    </div>
-    <template x-if="channelCount === 0">
-      <div class="text-center py-10">
-        <p class="text-4xl mb-3">📭</p>
-        <p class="text-sm text-[var(--color-text-muted)]">No channels configured yet.</p>
-        <a href="/setup" class="inline-block mt-3 text-sm text-[var(--color-accent)] hover:text-[var(--color-accent-hover)]">Go to Setup →</a>
-      </div>
-    </template>
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-      <template x-for="(cfg, name) in (overview.channels || {})" :key="name">
-        <div class="p-5 rounded-xl bg-[var(--color-surface-overlay)] border border-[var(--color-border-muted)] hover:border-[var(--color-border)] transition-all">
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-3">
-              <span class="text-2xl" x-text="channelIcon(name)"></span>
-              <h3 class="text-sm font-semibold text-[var(--color-text-primary)] capitalize" x-text="name"></h3>
-            </div>
-            <template x-if="cfg.enabled">
-              <span class="badge badge-success"><span class="pulse-dot green"></span> Active</span>
-            </template>
-            <template x-if="!cfg.enabled">
-              <span class="badge badge-muted"><span class="pulse-dot gray"></span> Disabled</span>
-            </template>
-          </div>
-          <div class="space-y-2 text-xs">
-            <template x-for="(val, key) in channelDetails(cfg)" :key="key">
-              <div class="flex justify-between gap-2">
-                <span class="text-[var(--color-text-muted)] shrink-0" x-text="key"></span>
-                <span class="text-[var(--color-text-secondary)] truncate text-right font-mono" x-text="String(val)"></span>
-              </div>
-            </template>
-            <div class="flex justify-between gap-2">
-              <span class="text-[var(--color-text-muted)]">Credentials</span>
-              <span :class="cfg.hasToken ? 'text-[#4ade80]' : 'text-[var(--color-text-muted)]'"
-                    x-text="cfg.hasToken ? '✓ Present' : '✗ Missing'"></span>
-            </div>
-          </div>
-        </div>
-      </template>
-    </div>
-  </div>
-
-  <!-- Devices -->
-  <div class="card mb-6">
-    <div class="flex items-center gap-3 mb-5">
-      <div class="w-9 h-9 rounded-xl bg-[rgba(230,57,70,0.08)] flex items-center justify-center text-lg">📱</div>
-      <h2 class="text-base font-semibold text-[var(--color-text-primary)]">Paired Devices</h2>
-      <span class="badge badge-muted ml-auto" x-text="deviceCount + ' device(s)'"></span>
-    </div>
-    <template x-if="!Array.isArray(status.devices) || status.devices.length === 0">
-      <p class="text-sm text-[var(--color-text-muted)] italic">No devices paired or gateway not running.</p>
-    </template>
-    <div class="space-y-3">
-      <template x-for="(dev, i) in (status.devices || [])" :key="i">
-        <div class="flex items-center justify-between p-3 rounded-xl bg-[var(--color-surface-overlay)]">
-          <div class="flex items-center gap-3">
-            <span class="text-base">💻</span>
-            <div>
-              <div class="text-sm font-medium text-[var(--color-text-primary)]" x-text="dev.name || dev.id || ('Device ' + (i+1))"></div>
-              <div class="text-xs text-[var(--color-text-muted)]" x-text="dev.type || dev.status || ''"></div>
-            </div>
-          </div>
-          <template x-if="dev.connected || dev.status === 'connected'">
-            <span class="badge badge-success"><span class="pulse-dot green"></span> Connected</span>
-          </template>
-          <template x-if="dev.status === 'pending'">
-            <span class="badge badge-warning"><span class="pulse-dot yellow"></span> Pending</span>
-          </template>
-          <template x-if="!dev.connected && dev.status !== 'connected' && dev.status !== 'pending'">
-            <span class="badge badge-muted" x-text="dev.status || 'Unknown'"></span>
-          </template>
-        </div>
-      </template>
-    </div>
-  </div>
-
-  <!-- Filesystem Summary -->
+  <!-- ═══════════════ FILESYSTEM ═══════════════ -->
   <div class="card mb-6">
     <div class="flex items-center gap-3 mb-5">
       <div class="w-9 h-9 rounded-xl bg-[rgba(230,57,70,0.08)] flex items-center justify-center text-lg">📂</div>
       <h2 class="text-base font-semibold text-[var(--color-text-primary)]">Service Filesystem</h2>
       <button @click="showFs = !showFs"
         class="ml-auto text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors">
-        <span x-text="showFs ? 'Collapse' : 'Expand'"></span>
+        <span x-text="showFs ? '▾ Collapse' : '▸ Expand'"></span>
       </button>
     </div>
 
-    <!-- Summary line -->
     <div class="flex flex-col sm:flex-row gap-4 mb-4 text-sm">
       <div class="flex items-center gap-2">
-        <span class="text-[var(--color-text-muted)]">State dir:</span>
-        <span class="font-mono text-xs text-[var(--color-text-secondary)]" x-text="fs.stateDir?.path || '—'"></span>
-        <span class="badge badge-muted" x-text="formatBytes(fs.stateDir?.totalSize)"></span>
+        <span class="text-[var(--color-text-muted)]">State:</span>
+        <span class="font-mono text-xs text-[var(--color-text-secondary)]" x-text="fsData.stateDir?.path || '—'"></span>
+        <span class="badge badge-muted !text-[10px]" x-text="formatBytes(fsData.stateDir?.totalSize)"></span>
       </div>
       <div class="flex items-center gap-2">
         <span class="text-[var(--color-text-muted)]">Workspace:</span>
-        <span class="font-mono text-xs text-[var(--color-text-secondary)]" x-text="fs.workspaceDir?.path || '—'"></span>
-        <span class="badge badge-muted" x-text="formatBytes(fs.workspaceDir?.totalSize)"></span>
+        <span class="font-mono text-xs text-[var(--color-text-secondary)]" x-text="fsData.workspaceDir?.path || '—'"></span>
+        <span class="badge badge-muted !text-[10px]" x-text="formatBytes(fsData.workspaceDir?.totalSize)"></span>
       </div>
     </div>
 
     <div x-show="showFs" x-cloak x-transition class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <!-- State dir tree -->
       <div>
         <h3 class="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-3">State Directory</h3>
         <div class="file-tree text-[var(--color-text-secondary)] space-y-0.5">
-          <template x-if="!fs.stateDir?.entries?.length">
-            <p class="text-[var(--color-text-muted)] italic text-xs">Empty or unavailable</p>
-          </template>
-          <template x-for="entry in (fs.stateDir?.entries || [])" :key="entry.name">
+          <template x-if="!fsData.stateDir?.entries?.length"><p class="text-[var(--color-text-muted)] italic text-xs">Empty or unavailable</p></template>
+          <template x-for="entry in (fsData.stateDir?.entries || [])" :key="entry.name">
             <div>
               <div class="file-tree-item">
                 <span x-text="entry.type === 'directory' ? '📁' : '📄'" class="text-xs"></span>
@@ -360,15 +565,11 @@
           </template>
         </div>
       </div>
-
-      <!-- Workspace dir tree -->
       <div>
         <h3 class="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-3">Workspace Directory</h3>
         <div class="file-tree text-[var(--color-text-secondary)] space-y-0.5">
-          <template x-if="!fs.workspaceDir?.entries?.length">
-            <p class="text-[var(--color-text-muted)] italic text-xs">Empty or unavailable</p>
-          </template>
-          <template x-for="entry in (fs.workspaceDir?.entries || [])" :key="entry.name">
+          <template x-if="!fsData.workspaceDir?.entries?.length"><p class="text-[var(--color-text-muted)] italic text-xs">Empty or unavailable</p></template>
+          <template x-for="entry in (fsData.workspaceDir?.entries || [])" :key="entry.name">
             <div>
               <div class="file-tree-item">
                 <span x-text="entry.type === 'directory' ? '📁' : '📄'" class="text-xs"></span>
@@ -393,7 +594,7 @@
     </div>
   </div>
 
-  <!-- Auto-refresh indicator -->
+  <!-- Footer -->
   <div class="text-center text-xs text-[var(--color-text-muted)] pb-8">
     Auto-refreshes every 30s · <span x-text="lastRefresh"></span>
   </div>
@@ -407,14 +608,13 @@ function agentsDashboard() {
     error: null,
     overview: {},
     status: {},
-    fs: {},
+    fsData: {},
     showFs: false,
     lastRefresh: '',
     _interval: null,
 
     async init() {
       await this.refresh();
-      // Auto-refresh every 30s
       this._interval = setInterval(() => this.refresh(), 30000);
     },
 
@@ -431,14 +631,14 @@ function agentsDashboard() {
       this.loading = true;
       this.error = null;
       try {
-        const [overview, status, fs] = await Promise.all([
+        const [overview, status, fsData] = await Promise.all([
           this.httpJson('/agents/api/overview'),
           this.httpJson('/agents/api/status'),
           this.httpJson('/agents/api/filesystem'),
         ]);
         this.overview = overview;
         this.status = status;
-        this.fs = fs;
+        this.fsData = fsData;
         this.lastRefresh = new Date().toLocaleTimeString();
       } catch (err) {
         this.error = err.message;
@@ -450,45 +650,26 @@ function agentsDashboard() {
     get channelCount() {
       return Object.keys(this.overview.channels || {}).length;
     },
-
     get deviceCount() {
       return Array.isArray(this.status.devices) ? this.status.devices.length : 0;
     },
-
     get gatewayOk() {
       return this.status.gateway?.running && this.status.gateway?.reachable;
     },
 
     channelIcon(name) {
-      const map = {
-        telegram: '✈️',
-        discord: '🎮',
-        slack: '💬',
-        whatsapp: '📱',
-        matrix: '🔗',
-        irc: '💻',
-      };
+      const map = { telegram: '✈️', discord: '🎮', slack: '💬', whatsapp: '📱', matrix: '🔗', irc: '💻' };
       return map[name.toLowerCase()] || '📡';
     },
-
+    channelColor(name) {
+      const map = { telegram: '#2AABEE', discord: '#5865F2', slack: '#E01E5A', whatsapp: '#25D366', matrix: '#0DBD8B', irc: '#A970FF' };
+      return map[name.toLowerCase()] || '#e63946';
+    },
     providerIcon(name) {
-      const map = {
-        openai: '🤖',
-        anthropic: '🧠',
-        google: '🔍',
-        openrouter: '🌐',
-        copilot: '🐙',
-        moonshot: '🌙',
-        qwen: '🌸',
-        minimax: '⚡',
-        synthetic: '🧪',
-        gemini: '💎',
-      };
+      const map = { openai: '🤖', anthropic: '🧠', google: '🔍', openrouter: '🌐', copilot: '🐙', moonshot: '🌙', qwen: '🌸', minimax: '⚡', synthetic: '🧪', gemini: '💎', profiles: '🔑' };
       return map[name.toLowerCase()] || '🔑';
     },
-
     channelDetails(cfg) {
-      // Return non-boolean, non-internal fields for display
       const skip = new Set(['enabled', 'hasToken', 'token', 'botToken', 'appToken']);
       const out = {};
       for (const [k, v] of Object.entries(cfg)) {
@@ -498,16 +679,13 @@ function agentsDashboard() {
       }
       return out;
     },
-
     formatBytes(bytes) {
       if (bytes === undefined || bytes === null) return '—';
       if (bytes === 0) return '0 B';
       const units = ['B', 'KB', 'MB', 'GB'];
       const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-      const val = bytes / Math.pow(1024, i);
-      return val.toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
+      return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
     },
-
     formatUptime(seconds) {
       if (!seconds) return '—';
       const h = Math.floor(seconds / 3600);
