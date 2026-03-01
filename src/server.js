@@ -1255,6 +1255,151 @@ app.get("/agents/api/filesystem", requireSetupAuth, async (_req, res) => {
   });
 });
 
+// ─── File Explorer API ──────────────────────────────────────────────
+
+// Helper: resolve a user-supplied relative path to a safe absolute path
+// inside either STATE_DIR or WORKSPACE_DIR.
+function resolveExplorerPath(rootType, relPath) {
+  const baseDir = rootType === "state" ? STATE_DIR : WORKSPACE_DIR;
+  const resolved = path.resolve(baseDir, relPath || "");
+  // Prevent directory-traversal attacks
+  if (!resolved.startsWith(baseDir)) return null;
+  return resolved;
+}
+
+// List directory contents (on-demand, single level)
+app.get("/agents/api/fs/list", requireSetupAuth, (req, res) => {
+  const { root, dir } = req.query;
+  const resolved = resolveExplorerPath(root, dir || "");
+  if (!resolved) return res.status(400).json({ ok: false, error: "Invalid path" });
+  if (!fs.existsSync(resolved)) return res.json({ ok: true, entries: [] });
+  try {
+    const items = fs.readdirSync(resolved, { withFileTypes: true });
+    const entries = items.map((item) => {
+      const fullPath = path.join(resolved, item.name);
+      const entry = {
+        name: item.name,
+        type: item.isDirectory() ? "directory" : "file",
+        path: path.relative(root === "state" ? STATE_DIR : WORKSPACE_DIR, fullPath).replace(/\\/g, "/"),
+      };
+      if (item.isFile()) {
+        try {
+          const stat = fs.statSync(fullPath);
+          entry.size = stat.size;
+          entry.modified = stat.mtime.toISOString();
+        } catch {}
+      }
+      if (item.isDirectory()) {
+        // Peek to see if it has children (for expand arrow display)
+        try {
+          entry.hasChildren = fs.readdirSync(fullPath).length > 0;
+        } catch {
+          entry.hasChildren = false;
+        }
+      }
+      return entry;
+    });
+    entries.sort((a, b) => {
+      if (a.type !== b.type) return a.type === "directory" ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    res.json({ ok: true, entries });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Read file content
+app.get("/agents/api/fs/read", requireSetupAuth, (req, res) => {
+  const { root, filePath: fp } = req.query;
+  const resolved = resolveExplorerPath(root, fp);
+  if (!resolved) return res.status(400).json({ ok: false, error: "Invalid path" });
+  if (!fs.existsSync(resolved)) return res.status(404).json({ ok: false, error: "File not found" });
+  try {
+    const stat = fs.statSync(resolved);
+    if (stat.isDirectory()) return res.status(400).json({ ok: false, error: "Path is a directory" });
+    // Limit readable size to 2MB
+    if (stat.size > 2 * 1024 * 1024) {
+      return res.status(413).json({ ok: false, error: "File too large (max 2MB)" });
+    }
+    // Detect binary files by checking the first 8KB for null bytes
+    const buf = Buffer.alloc(Math.min(8192, stat.size));
+    const fd = fs.openSync(resolved, "r");
+    fs.readSync(fd, buf, 0, buf.length, 0);
+    fs.closeSync(fd);
+    const isBinary = buf.includes(0);
+    if (isBinary) {
+      return res.json({ ok: true, binary: true, size: stat.size, modified: stat.mtime.toISOString() });
+    }
+    const content = fs.readFileSync(resolved, "utf8");
+    res.json({ ok: true, content, size: stat.size, modified: stat.mtime.toISOString() });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Write/save file content
+app.post("/agents/api/fs/write", requireSetupAuth, express.json({ limit: "5mb" }), (req, res) => {
+  const { root, filePath: fp, content } = req.body;
+  const resolved = resolveExplorerPath(root, fp);
+  if (!resolved) return res.status(400).json({ ok: false, error: "Invalid path" });
+  try {
+    fs.mkdirSync(path.dirname(resolved), { recursive: true });
+    fs.writeFileSync(resolved, content, "utf8");
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Create directory
+app.post("/agents/api/fs/mkdir", requireSetupAuth, express.json(), (req, res) => {
+  const { root, dirPath } = req.body;
+  const resolved = resolveExplorerPath(root, dirPath);
+  if (!resolved) return res.status(400).json({ ok: false, error: "Invalid path" });
+  try {
+    fs.mkdirSync(resolved, { recursive: true });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Rename/move file or directory
+app.post("/agents/api/fs/rename", requireSetupAuth, express.json(), (req, res) => {
+  const { root, oldPath, newPath } = req.body;
+  const resolvedOld = resolveExplorerPath(root, oldPath);
+  const resolvedNew = resolveExplorerPath(root, newPath);
+  if (!resolvedOld || !resolvedNew) return res.status(400).json({ ok: false, error: "Invalid path" });
+  if (!fs.existsSync(resolvedOld)) return res.status(404).json({ ok: false, error: "Source not found" });
+  try {
+    fs.mkdirSync(path.dirname(resolvedNew), { recursive: true });
+    fs.renameSync(resolvedOld, resolvedNew);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Delete file or directory
+app.post("/agents/api/fs/delete", requireSetupAuth, express.json(), (req, res) => {
+  const { root, targetPath } = req.body;
+  const resolved = resolveExplorerPath(root, targetPath);
+  if (!resolved) return res.status(400).json({ ok: false, error: "Invalid path" });
+  if (!fs.existsSync(resolved)) return res.status(404).json({ ok: false, error: "Not found" });
+  try {
+    const stat = fs.statSync(resolved);
+    if (stat.isDirectory()) {
+      fs.rmSync(resolved, { recursive: true, force: true });
+    } else {
+      fs.unlinkSync(resolved);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ─── End Agents Dashboard ───────────────────────────────────────────
 
 app.use(async (req, res) => {

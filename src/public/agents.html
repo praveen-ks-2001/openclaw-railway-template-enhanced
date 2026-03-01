@@ -101,10 +101,98 @@
     }
 
     .file-tree { font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; font-size: 13px; }
-    .file-tree-item { padding: 3px 0; display: flex; align-items: center; gap: 8px; }
-    .file-tree-item:hover { color: var(--color-text-primary); }
+    .file-tree-item {
+      padding: 4px 8px; display: flex; align-items: center; gap: 8px;
+      border-radius: 8px; cursor: pointer; transition: background 0.15s;
+      user-select: none; position: relative;
+    }
+    .file-tree-item:hover { background: rgba(255,255,255,0.04); color: var(--color-text-primary); }
+    .file-tree-item.selected { background: rgba(230,57,70,0.1); color: var(--color-text-primary); }
+    .file-tree-item.drag-over { background: rgba(34,197,94,0.12); outline: 1px dashed rgba(34,197,94,0.4); }
+    .file-tree-item[draggable="true"] { cursor: grab; }
+    .file-tree-item[draggable="true"]:active { cursor: grabbing; }
+
     .stat-value { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
     .stat-label { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    /* Context menu */
+    .ctx-menu {
+      position: fixed; z-index: 9999; min-width: 180px;
+      background: #1c1c1e; border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px; padding: 4px; box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+      font-size: 13px;
+    }
+    .ctx-menu-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 12px; border-radius: 8px; cursor: pointer;
+      color: var(--color-text-secondary); transition: background 0.12s;
+    }
+    .ctx-menu-item:hover { background: rgba(255,255,255,0.07); color: var(--color-text-primary); }
+    .ctx-menu-item.danger { color: #f87171; }
+    .ctx-menu-item.danger:hover { background: rgba(239,68,68,0.12); }
+    .ctx-menu-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 4px 8px; }
+
+    /* File editor modal */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 9998;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal-box {
+      background: #0f0f11; border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px; width: 90vw; max-width: 900px; height: 80vh;
+      display: flex; flex-direction: column; overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+    }
+    .modal-header {
+      padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.06);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .modal-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+    .modal-body textarea {
+      flex: 1; width: 100%; resize: none; border: none; outline: none;
+      background: transparent; color: var(--color-text-primary);
+      font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+      font-size: 13px; line-height: 1.6; padding: 16px 20px; tab-size: 2;
+    }
+    .modal-footer {
+      padding: 12px 20px; border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+
+    /* Inline rename input */
+    .inline-rename {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(230,57,70,0.4);
+      color: var(--color-text-primary); border-radius: 4px; padding: 1px 6px;
+      font-family: inherit; font-size: inherit; outline: none; width: 180px;
+    }
+
+    /* Prompt dialog */
+    .prompt-overlay {
+      position: fixed; inset: 0; z-index: 10000;
+      background: rgba(0,0,0,0.5); backdrop-filter: blur(2px);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .prompt-box {
+      background: #1c1c1e; border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px; padding: 24px; width: 380px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+    }
+    .prompt-input {
+      width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+      color: var(--color-text-primary); border-radius: 10px; padding: 10px 14px;
+      font-family: 'JetBrains Mono', monospace; font-size: 13px; outline: none;
+      margin: 12px 0 16px;
+    }
+    .prompt-input:focus { border-color: rgba(230,57,70,0.4); }
+
+    /* Expand/collapse arrow */
+    .tree-arrow {
+      width: 16px; height: 16px; display: inline-flex; align-items: center;
+      justify-content: center; font-size: 10px; color: var(--color-text-muted);
+      transition: transform 0.15s; flex-shrink: 0;
+    }
+    .tree-arrow.expanded { transform: rotate(90deg); }
   </style>
 </head>
 
@@ -514,84 +602,223 @@
     </div>
   </div>
 
-  <!-- ═══════════════ FILESYSTEM ═══════════════ -->
-  <div class="card mb-6">
+  <!-- ═══════════════ FILESYSTEM EXPLORER ═══════════════ -->
+  <div class="card mb-6" x-data="fileExplorer()" @keydown.escape.window="closeAll()">
     <div class="flex items-center gap-3 mb-5">
       <div class="w-9 h-9 rounded-xl bg-[rgba(230,57,70,0.08)] flex items-center justify-center text-lg">📂</div>
-      <h2 class="text-base font-semibold text-[var(--color-text-primary)]">Service Filesystem</h2>
-      <button @click="showFs = !showFs"
-        class="ml-auto text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors">
-        <span x-text="showFs ? '▾ Collapse' : '▸ Expand'"></span>
-      </button>
+      <h2 class="text-base font-semibold text-[var(--color-text-primary)]">File Explorer</h2>
+
+      <!-- Root selector tabs -->
+      <div class="flex gap-1 ml-4 bg-[var(--color-surface-overlay)] rounded-lg p-1">
+        <button @click="switchRoot('workspace')" class="text-xs px-3 py-1 rounded-md transition-colors"
+                :class="currentRoot === 'workspace' ? 'bg-[rgba(230,57,70,0.15)] text-[var(--color-accent)]' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]'">
+          Workspace
+        </button>
+        <button @click="switchRoot('state')" class="text-xs px-3 py-1 rounded-md transition-colors"
+                :class="currentRoot === 'state' ? 'bg-[rgba(230,57,70,0.15)] text-[var(--color-accent)]' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]'">
+          State
+        </button>
+      </div>
+
+      <div class="ml-auto flex items-center gap-2">
+        <button @click="promptNewFile('')" class="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors px-2 py-1 rounded-lg border border-[var(--color-border-muted)] hover:border-[var(--color-border)]" title="New File">
+          + File
+        </button>
+        <button @click="promptNewFolder('')" class="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors px-2 py-1 rounded-lg border border-[var(--color-border-muted)] hover:border-[var(--color-border)]" title="New Folder">
+          + Folder
+        </button>
+        <button @click="refreshAll()" class="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors" title="Refresh">
+          ↻
+        </button>
+      </div>
     </div>
 
-    <div class="flex flex-col sm:flex-row gap-4 mb-4 text-sm">
-      <div class="flex items-center gap-2">
-        <span class="text-[var(--color-text-muted)]">State:</span>
-        <span class="font-mono text-xs text-[var(--color-text-secondary)]" x-text="fsData.stateDir?.path || '—'"></span>
-        <span class="badge badge-muted !text-[10px]" x-text="formatBytes(fsData.stateDir?.totalSize)"></span>
-      </div>
-      <div class="flex items-center gap-2">
-        <span class="text-[var(--color-text-muted)]">Workspace:</span>
-        <span class="font-mono text-xs text-[var(--color-text-secondary)]" x-text="fsData.workspaceDir?.path || '—'"></span>
-        <span class="badge badge-muted !text-[10px]" x-text="formatBytes(fsData.workspaceDir?.totalSize)"></span>
-      </div>
+    <!-- File tree -->
+    <div class="file-tree text-[var(--color-text-secondary)] max-h-[500px] overflow-y-auto overflow-x-hidden rounded-xl bg-[var(--color-surface-overlay)] p-2"
+         @contextmenu.prevent="onBgContext($event)" @click="ctxMenu.show = false">
+
+      <template x-if="treeLoading">
+        <div class="flex items-center gap-2 p-4 text-sm text-[var(--color-text-muted)]">
+          <svg class="w-4 h-4 spinner" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          Loading…
+        </div>
+      </template>
+
+      <template x-if="!treeLoading && visibleNodes.length === 0">
+        <div class="p-4 text-sm text-[var(--color-text-muted)] italic text-center">Empty directory</div>
+      </template>
+
+      <!-- Flat list of visible nodes with depth-based indentation -->
+      <template x-for="vn in visibleNodes" :key="vn.path">
+        <div class="file-tree-item"
+             :class="{ 'selected': selectedPath === vn.path, 'drag-over': dragOverPath === vn.path }"
+             :style="'padding-left:' + (vn.depth * 18 + 8) + 'px'"
+             draggable="true"
+             @contextmenu.prevent.stop="onNodeContext($event, vn)"
+             @click.stop="onNodeClick(vn)"
+             @dblclick.stop="onNodeDblClick(vn)"
+             @dragstart="onDragStart($event, vn)"
+             @dragover.prevent="onDragOver($event, vn)"
+             @dragenter.prevent="onDragEnter($event, vn)"
+             @dragleave="onDragLeave($event, vn)"
+             @drop.prevent="onDrop($event, vn)"
+             @dragend="onDragEnd()">
+          <!-- Expand arrow (dirs) -->
+          <template x-if="vn.type === 'directory'">
+            <span class="tree-arrow" :class="{ 'expanded': expandedSet[vn.path] }">▶</span>
+          </template>
+          <template x-if="vn.type !== 'directory'">
+            <span style="width:16px;display:inline-block;flex-shrink:0;"></span>
+          </template>
+          <!-- Icon -->
+          <span class="text-xs flex-shrink-0" x-text="vn.type === 'directory' ? (expandedSet[vn.path] ? '📂' : '📁') : fileIcon(vn.name)"></span>
+          <!-- Name or inline rename -->
+          <template x-if="renamingPath !== vn.path">
+            <span class="truncate flex-1 min-w-0" x-text="vn.name"></span>
+          </template>
+          <template x-if="renamingPath === vn.path">
+            <input class="inline-rename flex-1" x-model="renameValue"
+                   @keydown.enter.stop="confirmRename(vn)"
+                   @keydown.escape.stop="cancelRename()"
+                   @blur="confirmRename(vn)"
+                   @click.stop
+                   x-init="$nextTick(() => { $el.focus(); $el.select(); })" />
+          </template>
+          <!-- File size -->
+          <span x-show="vn.type === 'file' && vn.size != null"
+                class="text-[var(--color-text-muted)] text-[11px] ml-auto flex-shrink-0"
+                x-text="fmtBytes(vn.size)"></span>
+        </div>
+      </template>
     </div>
 
-    <div x-show="showFs" x-cloak x-transition class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div>
-        <h3 class="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-3">State Directory</h3>
-        <div class="file-tree text-[var(--color-text-secondary)] space-y-0.5">
-          <template x-if="!fsData.stateDir?.entries?.length"><p class="text-[var(--color-text-muted)] italic text-xs">Empty or unavailable</p></template>
-          <template x-for="entry in (fsData.stateDir?.entries || [])" :key="entry.name">
-            <div>
-              <div class="file-tree-item">
-                <span x-text="entry.type === 'directory' ? '📁' : '📄'" class="text-xs"></span>
-                <span x-text="entry.name"></span>
-                <span x-show="entry.size !== undefined" class="text-[var(--color-text-muted)] text-[11px] ml-auto" x-text="formatBytes(entry.size)"></span>
-              </div>
-              <template x-if="entry.children && entry.children.length > 0">
-                <div class="ml-6 border-l border-[var(--color-border-muted)] pl-3">
-                  <template x-for="child in entry.children" :key="child.name">
-                    <div class="file-tree-item">
-                      <span x-text="child.type === 'directory' ? '📁' : '📄'" class="text-xs"></span>
-                      <span x-text="child.name"></span>
-                      <span x-show="child.size !== undefined" class="text-[var(--color-text-muted)] text-[11px] ml-auto" x-text="formatBytes(child.size)"></span>
-                    </div>
-                  </template>
-                </div>
-              </template>
-            </div>
-          </template>
+    <!-- ─── Context Menu (fixed-position) ─── -->
+    <div x-show="ctxMenu.show" x-cloak x-transition.opacity.duration.100ms
+         class="ctx-menu" :style="'left:'+ctxMenu.x+'px;top:'+ctxMenu.y+'px'"
+         @click.outside="ctxMenu.show = false">
+      <!-- Node context -->
+      <template x-if="ctxMenu.node">
+        <div>
+          <div class="ctx-menu-item" @click="onNodeDblClick(ctxMenu.node)" x-show="ctxMenu.node.type === 'file'">
+            <span>📄</span> Open
+          </div>
+          <div class="ctx-menu-item" @click="onNodeClick(ctxMenu.node)" x-show="ctxMenu.node.type === 'directory'">
+            <span>📂</span> <span x-text="expandedSet[ctxMenu.node.path] ? 'Collapse' : 'Expand'"></span>
+          </div>
+          <div class="ctx-menu-divider"></div>
+          <div class="ctx-menu-item" @click="startRename(ctxMenu.node)">
+            <span>✏️</span> Rename
+          </div>
+          <div class="ctx-menu-item" @click="promptNewFile(ctxMenu.node.type === 'directory' ? ctxMenu.node.path : parentOf(ctxMenu.node.path))">
+            <span>📄</span> New File Here
+          </div>
+          <div class="ctx-menu-item" @click="promptNewFolder(ctxMenu.node.type === 'directory' ? ctxMenu.node.path : parentOf(ctxMenu.node.path))">
+            <span>📁</span> New Folder Here
+          </div>
+          <div class="ctx-menu-divider"></div>
+          <div class="ctx-menu-item danger" @click="deleteNode(ctxMenu.node)">
+            <span>🗑️</span> Delete
+          </div>
         </div>
-      </div>
-      <div>
-        <h3 class="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-3">Workspace Directory</h3>
-        <div class="file-tree text-[var(--color-text-secondary)] space-y-0.5">
-          <template x-if="!fsData.workspaceDir?.entries?.length"><p class="text-[var(--color-text-muted)] italic text-xs">Empty or unavailable</p></template>
-          <template x-for="entry in (fsData.workspaceDir?.entries || [])" :key="entry.name">
-            <div>
-              <div class="file-tree-item">
-                <span x-text="entry.type === 'directory' ? '📁' : '📄'" class="text-xs"></span>
-                <span x-text="entry.name"></span>
-                <span x-show="entry.size !== undefined" class="text-[var(--color-text-muted)] text-[11px] ml-auto" x-text="formatBytes(entry.size)"></span>
-              </div>
-              <template x-if="entry.children && entry.children.length > 0">
-                <div class="ml-6 border-l border-[var(--color-border-muted)] pl-3">
-                  <template x-for="child in entry.children" :key="child.name">
-                    <div class="file-tree-item">
-                      <span x-text="child.type === 'directory' ? '📁' : '📄'" class="text-xs"></span>
-                      <span x-text="child.name"></span>
-                      <span x-show="child.size !== undefined" class="text-[var(--color-text-muted)] text-[11px] ml-auto" x-text="formatBytes(child.size)"></span>
-                    </div>
-                  </template>
-                </div>
-              </template>
-            </div>
-          </template>
+      </template>
+      <!-- Background context -->
+      <template x-if="!ctxMenu.node">
+        <div>
+          <div class="ctx-menu-item" @click="promptNewFile('')"><span>📄</span> New File</div>
+          <div class="ctx-menu-item" @click="promptNewFolder('')"><span>📁</span> New Folder</div>
+          <div class="ctx-menu-divider"></div>
+          <div class="ctx-menu-item" @click="refreshAll()"><span>↻</span> Refresh</div>
         </div>
-      </div>
+      </template>
     </div>
+
+    <!-- ─── Prompt Dialog ─── -->
+    <template x-if="prompt.show">
+      <div class="prompt-overlay" @click.self="prompt.show = false">
+        <div class="prompt-box" @keydown.escape.stop="prompt.show = false">
+          <div class="text-sm font-semibold text-[var(--color-text-primary)]" x-text="prompt.title"></div>
+          <input class="prompt-input" x-model="prompt.value"
+                 @keydown.enter="promptConfirm()" :placeholder="prompt.placeholder"
+                 x-init="$nextTick(() => $el.focus())" />
+          <div class="flex justify-end gap-2">
+            <button @click="prompt.show = false"
+                    class="text-xs px-4 py-2 rounded-lg border border-[var(--color-border-muted)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">
+              Cancel
+            </button>
+            <button @click="promptConfirm()"
+                    class="text-xs px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors">
+              <span x-text="prompt.actionLabel"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- ─── File Editor Modal ─── -->
+    <template x-if="editor.show">
+      <div class="modal-overlay" @click.self="closeEditor()">
+        <div class="modal-box" @keydown.escape.stop="closeEditor()">
+          <div class="modal-header">
+            <span class="text-lg">📄</span>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-semibold text-[var(--color-text-primary)] truncate" x-text="editor.path"></div>
+              <div class="text-[11px] text-[var(--color-text-muted)]">
+                <span x-text="fmtBytes(editor.size)"></span>
+                <template x-if="editor.modified">
+                  <span> · <span x-text="new Date(editor.modified).toLocaleString()"></span></span>
+                </template>
+                <template x-if="editor.dirty">
+                  <span class="text-[var(--color-warning)]"> · Unsaved</span>
+                </template>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <template x-if="!editor.binary && !editor.readError">
+                <button @click="saveFile()"
+                        class="text-xs px-4 py-1.5 rounded-lg bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] transition-colors disabled:opacity-50"
+                        :disabled="editor.saving">
+                  <span x-text="editor.saving ? 'Saving…' : 'Save'"></span>
+                </button>
+              </template>
+              <button @click="closeEditor()"
+                      class="text-xs px-3 py-1.5 rounded-lg border border-[var(--color-border-muted)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">
+                ✕
+              </button>
+            </div>
+          </div>
+          <div class="modal-body">
+            <template x-if="editor.loading">
+              <div class="flex items-center justify-center h-full text-sm text-[var(--color-text-muted)]">
+                <svg class="w-5 h-5 spinner mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                Loading…
+              </div>
+            </template>
+            <template x-if="editor.readError">
+              <div class="flex items-center justify-center h-full text-sm text-[#f87171]" x-text="editor.readError"></div>
+            </template>
+            <template x-if="editor.binary">
+              <div class="flex flex-col items-center justify-center h-full gap-2 text-[var(--color-text-muted)]">
+                <span class="text-4xl">🔒</span>
+                <p class="text-sm">Binary file — cannot edit</p>
+                <p class="text-xs" x-text="fmtBytes(editor.size)"></p>
+              </div>
+            </template>
+            <template x-if="!editor.loading && !editor.readError && !editor.binary">
+              <textarea x-model="editor.content" @input="editor.dirty = true"
+                        spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+            </template>
+          </div>
+          <div class="modal-footer">
+            <div class="text-[11px] text-[var(--color-text-muted)]">
+              <template x-if="editor.saveMsg">
+                <span :class="editor.saveError ? 'text-[#f87171]' : 'text-[#4ade80]'" x-text="editor.saveMsg"></span>
+              </template>
+            </div>
+            <div class="text-[11px] text-[var(--color-text-muted)]">Ctrl+S to save</div>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 
   <!-- Footer -->
@@ -602,97 +829,396 @@
 </div>
 
 <script>
+/* ═══════════════════════════════════════════════════
+   AGENTS DASHBOARD — main component
+   ═══════════════════════════════════════════════════ */
 function agentsDashboard() {
   return {
-    loading: false,
-    error: null,
-    overview: {},
-    status: {},
-    fsData: {},
-    showFs: false,
-    lastRefresh: '',
-    _interval: null,
+    loading: false, error: null,
+    overview: {}, status: {}, fsData: {},
+    showFs: false, lastRefresh: '', _interval: null,
 
     async init() {
       await this.refresh();
       this._interval = setInterval(() => this.refresh(), 30000);
     },
-
     async httpJson(url) {
-      const res = await fetch(url, { credentials: 'same-origin' });
-      if (!res.ok) {
-        const t = await res.text();
-        throw new Error('HTTP ' + res.status + ': ' + (t || res.statusText));
-      }
-      return res.json();
+      const r = await fetch(url, { credentials: 'same-origin' });
+      if (!r.ok) { const t = await r.text(); throw new Error('HTTP ' + r.status + ': ' + (t || r.statusText)); }
+      return r.json();
     },
-
     async refresh() {
-      this.loading = true;
-      this.error = null;
+      this.loading = true; this.error = null;
       try {
         const [overview, status, fsData] = await Promise.all([
           this.httpJson('/agents/api/overview'),
           this.httpJson('/agents/api/status'),
           this.httpJson('/agents/api/filesystem'),
         ]);
-        this.overview = overview;
-        this.status = status;
-        this.fsData = fsData;
+        this.overview = overview; this.status = status; this.fsData = fsData;
         this.lastRefresh = new Date().toLocaleTimeString();
-      } catch (err) {
-        this.error = err.message;
-      } finally {
-        this.loading = false;
-      }
+      } catch (err) { this.error = err.message; }
+      finally { this.loading = false; }
     },
+    get channelCount() { return Object.keys(this.overview.channels || {}).length; },
+    get deviceCount()  { return Array.isArray(this.status.devices) ? this.status.devices.length : 0; },
+    get gatewayOk()    { return this.status.gateway?.running && this.status.gateway?.reachable; },
 
-    get channelCount() {
-      return Object.keys(this.overview.channels || {}).length;
-    },
-    get deviceCount() {
-      return Array.isArray(this.status.devices) ? this.status.devices.length : 0;
-    },
-    get gatewayOk() {
-      return this.status.gateway?.running && this.status.gateway?.reachable;
-    },
-
-    channelIcon(name) {
-      const map = { telegram: '✈️', discord: '🎮', slack: '💬', whatsapp: '📱', matrix: '🔗', irc: '💻' };
-      return map[name.toLowerCase()] || '📡';
-    },
-    channelColor(name) {
-      const map = { telegram: '#2AABEE', discord: '#5865F2', slack: '#E01E5A', whatsapp: '#25D366', matrix: '#0DBD8B', irc: '#A970FF' };
-      return map[name.toLowerCase()] || '#e63946';
-    },
-    providerIcon(name) {
-      const map = { openai: '🤖', anthropic: '🧠', google: '🔍', openrouter: '🌐', copilot: '🐙', moonshot: '🌙', qwen: '🌸', minimax: '⚡', synthetic: '🧪', gemini: '💎', profiles: '🔑' };
-      return map[name.toLowerCase()] || '🔑';
-    },
+    channelIcon(n)  { return ({ telegram:'✈️',discord:'🎮',slack:'💬',whatsapp:'📱',matrix:'🔗',irc:'💻' })[n.toLowerCase()] || '📡'; },
+    channelColor(n) { return ({ telegram:'#2AABEE',discord:'#5865F2',slack:'#E01E5A',whatsapp:'#25D366',matrix:'#0DBD8B',irc:'#A970FF' })[n.toLowerCase()] || '#e63946'; },
+    providerIcon(n) { return ({ openai:'🤖',anthropic:'🧠',google:'🔍',openrouter:'🌐',copilot:'🐙',moonshot:'🌙',qwen:'🌸',minimax:'⚡',synthetic:'🧪',gemini:'💎',profiles:'🔑' })[n.toLowerCase()] || '🔑'; },
     channelDetails(cfg) {
-      const skip = new Set(['enabled', 'hasToken', 'token', 'botToken', 'appToken']);
+      const skip = new Set(['enabled','hasToken','token','botToken','appToken']);
       const out = {};
-      for (const [k, v] of Object.entries(cfg)) {
-        if (skip.has(k)) continue;
-        if (typeof v === 'object') continue;
-        out[k] = v;
-      }
+      for (const [k,v] of Object.entries(cfg)) { if (!skip.has(k) && typeof v !== 'object') out[k] = v; }
       return out;
     },
-    formatBytes(bytes) {
-      if (bytes === undefined || bytes === null) return '—';
-      if (bytes === 0) return '0 B';
-      const units = ['B', 'KB', 'MB', 'GB'];
-      const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-      return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
+    formatBytes(b) {
+      if (b == null) return '—'; if (b === 0) return '0 B';
+      const u = ['B','KB','MB','GB'], i = Math.min(Math.floor(Math.log(b)/Math.log(1024)), u.length-1);
+      return (b/Math.pow(1024,i)).toFixed(i===0?0:1)+' '+u[i];
     },
-    formatUptime(seconds) {
-      if (!seconds) return '—';
-      const h = Math.floor(seconds / 3600);
-      const m = Math.floor((seconds % 3600) / 60);
-      if (h > 0) return h + 'h ' + m + 'm';
-      if (m > 0) return m + 'm';
-      return Math.floor(seconds) + 's';
+    formatUptime(s) {
+      if (!s) return '—';
+      const h = Math.floor(s/3600), m = Math.floor((s%3600)/60);
+      return h > 0 ? h+'h '+m+'m' : m > 0 ? m+'m' : Math.floor(s)+'s';
+    },
+  };
+}
+
+/* ═══════════════════════════════════════════════════
+   FILE EXPLORER — uses a flat visible-node list
+   ═══════════════════════════════════════════════════ */
+function fileExplorer() {
+  return {
+    currentRoot: 'workspace',
+    // Hierarchical tree (nodes with .children arrays)
+    _tree: [],
+    treeLoading: false,
+    // Track which directory paths are expanded
+    expandedSet: {},
+    selectedPath: null,
+    // Rename
+    renamingPath: null,
+    renameValue: '',
+    // Drag & drop
+    dragPath: null,
+    dragOverPath: null,
+    // Context menu
+    ctxMenu: { show: false, x: 0, y: 0, node: null },
+    // Prompt dialog
+    prompt: { show: false, title: '', placeholder: '', value: '', actionLabel: 'Create', _cb: null },
+    // Editor modal
+    editor: {
+      show: false, loading: false, saving: false,
+      path: '', content: '', size: 0, modified: null,
+      binary: false, readError: null, dirty: false,
+      saveMsg: '', saveError: false,
+    },
+
+    async init() {
+      await this.refreshAll();
+      document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's' && this.editor.show) {
+          e.preventDefault(); this.saveFile();
+        }
+      });
+    },
+
+    /* ── Computed flat list of visible nodes ── */
+    get visibleNodes() {
+      const list = [];
+      const walk = (nodes, depth) => {
+        for (const n of nodes) {
+          list.push({ ...n, depth, _children: undefined });
+          if (n.type === 'directory' && this.expandedSet[n.path] && n.children?.length) {
+            walk(n.children, depth + 1);
+          }
+        }
+      };
+      walk(this._tree, 0);
+      return list;
+    },
+
+    /* ── API helpers ── */
+    async _api(url, opts) {
+      const r = await fetch(url, { credentials: 'same-origin', ...opts });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || 'Request failed');
+      return d;
+    },
+
+    /* ── Load / refresh ── */
+    async refreshAll() {
+      this.treeLoading = true;
+      this.expandedSet = {};
+      try { await this._loadDir(''); } catch(e) { console.error(e); }
+      this.treeLoading = false;
+    },
+
+    switchRoot(root) {
+      this.currentRoot = root;
+      this._tree = [];
+      this.refreshAll();
+    },
+
+    async _loadDir(dirPath) {
+      const data = await this._api(`/agents/api/fs/list?root=${this.currentRoot}&dir=${encodeURIComponent(dirPath)}`);
+      const entries = (data.entries || []).map(e => ({
+        name: e.name, type: e.type, path: e.path,
+        size: e.size, modified: e.modified,
+        hasChildren: e.hasChildren,
+        children: [],
+      }));
+      if (dirPath === '') {
+        this._tree = entries;
+      } else {
+        this._setChildren(this._tree, dirPath, entries);
+      }
+    },
+
+    _setChildren(nodes, target, children) {
+      for (const n of nodes) {
+        if (n.path === target) { n.children = children; return true; }
+        if (n.children?.length && this._setChildren(n.children, target, children)) return true;
+      }
+      return false;
+    },
+
+    /* ── Click handlers ── */
+    onNodeClick(vn) {
+      this.ctxMenu.show = false;
+      this.selectedPath = vn.path;
+      if (vn.type === 'directory') {
+        if (this.expandedSet[vn.path]) {
+          delete this.expandedSet[vn.path];
+          // Force reactivity
+          this.expandedSet = { ...this.expandedSet };
+        } else {
+          this.expandedSet[vn.path] = true;
+          this.expandedSet = { ...this.expandedSet };
+          this._loadDir(vn.path);
+        }
+      }
+    },
+
+    onNodeDblClick(vn) {
+      if (vn.type === 'file') this.openFile(vn);
+    },
+
+    /* ── Open / edit file ── */
+    async openFile(vn) {
+      this.ctxMenu.show = false;
+      this.selectedPath = vn.path;
+      this.editor = {
+        show: true, loading: true, saving: false,
+        path: vn.path, content: '', size: vn.size || 0,
+        modified: vn.modified, binary: false, readError: null,
+        dirty: false, saveMsg: '', saveError: false,
+      };
+      try {
+        const d = await this._api(`/agents/api/fs/read?root=${this.currentRoot}&filePath=${encodeURIComponent(vn.path)}`);
+        if (d.binary) {
+          this.editor.binary = true; this.editor.size = d.size;
+        } else {
+          this.editor.content = d.content; this.editor.size = d.size; this.editor.modified = d.modified;
+        }
+      } catch (e) { this.editor.readError = e.message; }
+      finally { this.editor.loading = false; }
+    },
+
+    async saveFile() {
+      if (this.editor.saving || this.editor.binary) return;
+      this.editor.saving = true; this.editor.saveMsg = '';
+      try {
+        await this._api('/agents/api/fs/write', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ root: this.currentRoot, filePath: this.editor.path, content: this.editor.content }),
+        });
+        this.editor.dirty = false;
+        this.editor.saveMsg = '✓ Saved'; this.editor.saveError = false;
+        setTimeout(() => { if (this.editor.saveMsg === '✓ Saved') this.editor.saveMsg = ''; }, 3000);
+      } catch (e) { this.editor.saveMsg = 'Failed: ' + e.message; this.editor.saveError = true; }
+      finally { this.editor.saving = false; }
+    },
+
+    closeEditor() {
+      if (this.editor.dirty && !confirm('Unsaved changes will be lost. Close?')) return;
+      this.editor.show = false;
+    },
+
+    closeAll() {
+      this.ctxMenu.show = false;
+      if (this.prompt.show) { this.prompt.show = false; return; }
+      if (this.editor.show) { this.closeEditor(); }
+    },
+
+    /* ── Context menu ── */
+    onNodeContext(ev, vn) {
+      ev.preventDefault(); ev.stopPropagation();
+      this.selectedPath = vn.path;
+      this.ctxMenu = {
+        show: true, node: vn,
+        x: Math.min(ev.clientX, window.innerWidth - 200),
+        y: Math.min(ev.clientY, window.innerHeight - 280),
+      };
+    },
+    onBgContext(ev) {
+      ev.preventDefault();
+      this.ctxMenu = {
+        show: true, node: null,
+        x: Math.min(ev.clientX, window.innerWidth - 200),
+        y: Math.min(ev.clientY, window.innerHeight - 160),
+      };
+    },
+
+    /* ── Create new file / folder ── */
+    promptNewFile(parentPath) {
+      this.ctxMenu.show = false;
+      if (parentPath && !this.expandedSet[parentPath]) {
+        this.expandedSet[parentPath] = true;
+        this.expandedSet = { ...this.expandedSet };
+        this._loadDir(parentPath);
+      }
+      this.prompt = {
+        show: true, title: 'New File', placeholder: 'filename.txt', value: '', actionLabel: 'Create',
+        _cb: async (name) => {
+          const fp = parentPath ? parentPath + '/' + name : name;
+          await this._api('/agents/api/fs/write', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ root: this.currentRoot, filePath: fp, content: '' }),
+          });
+          await this._reloadParent(parentPath);
+        },
+      };
+    },
+    promptNewFolder(parentPath) {
+      this.ctxMenu.show = false;
+      if (parentPath && !this.expandedSet[parentPath]) {
+        this.expandedSet[parentPath] = true;
+        this.expandedSet = { ...this.expandedSet };
+        this._loadDir(parentPath);
+      }
+      this.prompt = {
+        show: true, title: 'New Folder', placeholder: 'folder-name', value: '', actionLabel: 'Create',
+        _cb: async (name) => {
+          const dp = parentPath ? parentPath + '/' + name : name;
+          await this._api('/agents/api/fs/mkdir', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ root: this.currentRoot, dirPath: dp }),
+          });
+          await this._reloadParent(parentPath);
+        },
+      };
+    },
+    async promptConfirm() {
+      const v = this.prompt.value.trim();
+      if (!v) return;
+      try { await this.prompt._cb(v); } catch (e) { alert('Error: ' + e.message); }
+      this.prompt.show = false;
+    },
+
+    /* ── Rename ── */
+    startRename(vn) {
+      this.ctxMenu.show = false;
+      this.renamingPath = vn.path;
+      this.renameValue = vn.name;
+    },
+    cancelRename() { this.renamingPath = null; },
+    async confirmRename(vn) {
+      const newName = this.renameValue.trim();
+      this.renamingPath = null;
+      if (!newName || newName === vn.name) return;
+      const parent = this.parentOf(vn.path);
+      const newPath = parent ? parent + '/' + newName : newName;
+      try {
+        await this._api('/agents/api/fs/rename', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ root: this.currentRoot, oldPath: vn.path, newPath }),
+        });
+        await this._reloadParent(parent);
+      } catch (e) { alert('Rename failed: ' + e.message); }
+    },
+
+    /* ── Delete ── */
+    async deleteNode(vn) {
+      this.ctxMenu.show = false;
+      const label = vn.type === 'directory' ? `folder "${vn.name}" and all contents` : `file "${vn.name}"`;
+      if (!confirm('Delete ' + label + '?')) return;
+      const parent = this.parentOf(vn.path);
+      try {
+        await this._api('/agents/api/fs/delete', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ root: this.currentRoot, targetPath: vn.path }),
+        });
+        await this._reloadParent(parent);
+      } catch (e) { alert('Delete failed: ' + e.message); }
+    },
+
+    /* ── Drag & Drop ── */
+    onDragStart(ev, vn) {
+      this.dragPath = vn.path;
+      ev.dataTransfer.effectAllowed = 'move';
+      ev.dataTransfer.setData('text/plain', vn.path);
+    },
+    onDragOver(ev, vn) {
+      if (!this.dragPath || vn.type !== 'directory' || vn.path === this.dragPath) return;
+      if (vn.path.startsWith(this.dragPath + '/')) return;
+      ev.dataTransfer.dropEffect = 'move';
+    },
+    onDragEnter(ev, vn) {
+      if (!this.dragPath || vn.type !== 'directory' || vn.path === this.dragPath) return;
+      if (vn.path.startsWith(this.dragPath + '/')) return;
+      this.dragOverPath = vn.path;
+    },
+    onDragLeave(ev, vn) {
+      if (this.dragOverPath === vn.path) this.dragOverPath = null;
+    },
+    async onDrop(ev, targetVn) {
+      this.dragOverPath = null;
+      if (!this.dragPath || targetVn.type !== 'directory' || targetVn.path === this.dragPath) { this.dragPath = null; return; }
+      if (targetVn.path.startsWith(this.dragPath + '/')) { this.dragPath = null; return; }
+      const srcName = this.dragPath.includes('/') ? this.dragPath.split('/').pop() : this.dragPath;
+      const srcParent = this.parentOf(this.dragPath);
+      const newPath = targetVn.path + '/' + srcName;
+      try {
+        await this._api('/agents/api/fs/rename', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ root: this.currentRoot, oldPath: this.dragPath, newPath }),
+        });
+        await this._reloadParent(srcParent);
+        if (this.expandedSet[targetVn.path]) await this._loadDir(targetVn.path);
+      } catch (e) { alert('Move failed: ' + e.message); }
+      this.dragPath = null;
+    },
+    onDragEnd() { this.dragPath = null; this.dragOverPath = null; },
+
+    /* ── Utility ── */
+    parentOf(p)  { const i = p.lastIndexOf('/'); return i > 0 ? p.substring(0, i) : ''; },
+    async _reloadParent(p) { await this._loadDir(p || ''); },
+
+    fileIcon(name) {
+      const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+      return ({
+        js:'🟨',mjs:'🟨',cjs:'🟨', ts:'🔷',mts:'🔷', jsx:'⚛️',tsx:'⚛️',
+        json:'📋',yaml:'📋',yml:'📋',toml:'📋',xml:'📋',
+        md:'📝',txt:'📝',log:'📝',csv:'📝',
+        html:'🌐',htm:'🌐', css:'🎨',scss:'🎨',less:'🎨',
+        py:'🐍',rb:'💎',go:'🔵',rs:'🦀',java:'☕',kt:'☕',
+        sh:'⚙️',bash:'⚙️',zsh:'⚙️',fish:'⚙️',ps1:'⚙️',
+        png:'🖼️',jpg:'🖼️',jpeg:'🖼️',gif:'🖼️',svg:'🖼️',webp:'🖼️',ico:'🖼️',
+        zip:'📦',tar:'📦',gz:'📦',bz2:'📦',rar:'📦','7z':'📦',
+        lock:'🔒',env:'🔐',
+        pdf:'📕',doc:'📘',docx:'📘',
+        mp3:'🎵',wav:'🎵',mp4:'🎬',mov:'🎬',
+        wasm:'🟣',sql:'🗃️',db:'🗃️',sqlite:'🗃️',
+      })[ext] || '📄';
+    },
+
+    fmtBytes(b) {
+      if (b == null) return '—'; if (b === 0) return '0 B';
+      const u = ['B','KB','MB','GB'], i = Math.min(Math.floor(Math.log(b)/Math.log(1024)), u.length-1);
+      return (b/Math.pow(1024,i)).toFixed(i===0?0:1)+' '+u[i];
     },
   };
 }
