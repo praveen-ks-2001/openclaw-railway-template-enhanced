@@ -7,6 +7,7 @@
   <title>🦞 OpenClaw — Agents Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://unpkg.com/zdog@1/dist/zdog.dist.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -193,11 +194,45 @@
       transition: transform 0.15s; flex-shrink: 0;
     }
     .tree-arrow.expanded { transform: rotate(90deg); }
+
+    /* ── Office Visualization ── */
+    #officeVizWrap {
+      position: relative; width: 100%; height: 320px;
+      border-radius: 18px; overflow: hidden;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      border: 1px solid var(--color-border-muted);
+      margin-bottom: 24px;
+    }
+    #officeViz { display: block; width: 100%; height: 100%; cursor: pointer; }
+    #officeLabels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+    .agentLabel {
+      position: absolute; transform: translate(-50%, -100%);
+      font: 11px/1.2 'Inter', system-ui, sans-serif;
+      background: rgba(15,15,20,0.82); color: #eee;
+      padding: 3px 7px; border-radius: 6px;
+      white-space: nowrap; pointer-events: none;
+      border: 1px solid rgba(255,255,255,0.08);
+      backdrop-filter: blur(4px);
+      transition: opacity 0.15s;
+    }
+    .agentLabel .agentName { font-weight: 600; font-size: 11px; }
+    .agentLabel .agentStatus { font-size: 10px; opacity: 0.7; display: flex; align-items: center; gap: 4px; }
+    .agentLabel .statusDot {
+      display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    }
+    .agentLabel.selected { border-color: rgba(230,57,70,0.5); box-shadow: 0 0 8px rgba(230,57,70,0.25); }
+    .card.viz-selected { border-color: rgba(230,57,70,0.35) !important; box-shadow: 0 0 0 1px rgba(230,57,70,0.1), 0 0 20px rgba(230,57,70,0.08) !important; }
   </style>
 </head>
 
 <body class="font-sans text-[var(--color-text-secondary)] min-h-screen antialiased">
 <div x-data="agentsDashboard()" x-init="init()" class="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+
+  <!-- ════════════ OFFICE VISUALIZATION ════════════ -->
+  <div id="officeVizWrap">
+    <canvas id="officeViz"></canvas>
+    <div id="officeLabels"></div>
+  </div>
 
   <!-- Header -->
   <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
@@ -233,7 +268,7 @@
   <!-- ═══════════════════════════════════════════════════════════
        MAIN AGENT VISUAL — big hero card with avatar + status
        ═══════════════════════════════════════════════════════════ -->
-  <div class="card mb-8 relative overflow-hidden">
+  <div class="card mb-8 relative overflow-hidden" :class="{ 'viz-selected': selectedVizAgent === '__main__' }">
     <!-- Subtle gradient bg -->
     <div class="absolute inset-0 opacity-30 pointer-events-none"
          style="background: radial-gradient(ellipse at 30% 20%, rgba(230,57,70,0.08) 0%, transparent 60%);"></div>
@@ -362,7 +397,7 @@
 
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
       <template x-for="(cfg, name) in (overview.channels || {})" :key="name">
-        <div class="card !p-0 overflow-hidden group">
+        <div class="card !p-0 overflow-hidden group" :class="{ 'viz-selected': selectedVizAgent === ('ch_' + name) }">
           <!-- Channel header with colored accent -->
           <div class="p-5 pb-4 relative">
             <!-- Top accent bar -->
@@ -838,9 +873,12 @@ function agentsDashboard() {
     overview: {}, status: {}, fsData: {},
     showFs: false, lastRefresh: '', _interval: null,
 
+    selectedVizAgent: null,
+
     async init() {
       await this.refresh();
       this._interval = setInterval(() => this.refresh(), 30000);
+      window.__dashData = this;
     },
     async httpJson(url) {
       const r = await fetch(url, { credentials: 'same-origin' });
@@ -1222,6 +1260,552 @@ function fileExplorer() {
     },
   };
 }
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     OFFICE VISUALIZATION — Zdog Pokémon-style isometric view
+     ═══════════════════════════════════════════════════════════ -->
+<script>
+(function() {
+  'use strict';
+
+  /* ── Boot: wait for Zdog + Alpine data ── */
+  function boot() {
+    if (typeof Zdog === 'undefined' || !window.__dashData) {
+      requestAnimationFrame(boot);
+      return;
+    }
+    buildViz(window.__dashData);
+  }
+
+  function buildViz(dash) {
+    const TAU = Zdog.TAU;
+    const canvas = document.getElementById('officeViz');
+    const labelsEl = document.getElementById('officeLabels');
+    if (!canvas || !labelsEl) return;
+
+    /* ─── Constants ─── */
+    const officeW = 500, officeD = 300, wallH = 70;
+    const AGENT_COLORS = [
+      '#e63946', '#5577cc', '#cc7744', '#aa55aa',
+      '#44aaaa', '#22c55e', '#88aa44', '#cc8844'
+    ];
+    const DESK_SLOTS = [
+      { x: -160, z: -60 }, { x: -30, z: -60 }, { x: 100, z: -60 },
+      { x: -160, z:  70 }, { x: -30, z:  70 }, { x: 100, z:  70 },
+      { x:  200, z: -20 }, { x:  200, z:  50 },
+    ];
+
+    /* ─── Illustration ─── */
+    const illo = new Zdog.Illustration({
+      element: canvas,
+      resize: true,
+      centered: true,
+      zoom: 1,
+      rotate: { x: -TAU / 8, y: TAU / 8 },
+      onResize: function(w) {
+        this.zoom = Math.max(0.45, Math.min(1.4, w / 880));
+      },
+    });
+
+    const world = new Zdog.Anchor({ addTo: illo });
+
+    /* ═══════ Build Office Room ═══════ */
+
+    // Floor
+    new Zdog.Box({
+      addTo: world,
+      width: officeW, height: 4, depth: officeD,
+      stroke: false,
+      color: '#252540',
+      topFace: '#2a2a48',
+      bottomFace: '#1e1e36',
+      leftFace: '#222240', rightFace: '#222240',
+      frontFace: '#222240', rearFace: '#222240',
+    });
+
+    // Floor grid lines for Pokémon style
+    for (let gx = -officeW / 2 + 50; gx < officeW / 2; gx += 50) {
+      new Zdog.Shape({
+        addTo: world,
+        path: [{ x: gx, y: -2.5, z: -officeD / 2 }, { x: gx, y: -2.5, z: officeD / 2 }],
+        closed: false, stroke: 1, color: 'rgba(255,255,255,0.04)',
+      });
+    }
+    for (let gz = -officeD / 2 + 50; gz < officeD / 2; gz += 50) {
+      new Zdog.Shape({
+        addTo: world,
+        path: [{ x: -officeW / 2, y: -2.5, z: gz }, { x: officeW / 2, y: -2.5, z: gz }],
+        closed: false, stroke: 1, color: 'rgba(255,255,255,0.04)',
+      });
+    }
+
+    // Back wall
+    new Zdog.Box({
+      addTo: world,
+      width: officeW, height: wallH, depth: 5,
+      translate: { y: -wallH / 2, z: -officeD / 2 },
+      stroke: false, color: '#1e1e3a',
+      frontFace: '#282848',
+    });
+
+    // Left wall
+    new Zdog.Box({
+      addTo: world,
+      width: 5, height: wallH, depth: officeD,
+      translate: { x: -officeW / 2, y: -wallH / 2 },
+      stroke: false, color: '#1a1a34',
+      rightFace: '#242444',
+    });
+
+    // Right wall (short, for visibility)
+    new Zdog.Box({
+      addTo: world,
+      width: 5, height: wallH * 0.35, depth: officeD,
+      translate: { x: officeW / 2, y: -wallH * 0.175 },
+      stroke: false, color: 'rgba(40,40,70,0.4)',
+    });
+
+    // Front wall (very short)
+    new Zdog.Box({
+      addTo: world,
+      width: officeW, height: wallH * 0.25, depth: 5,
+      translate: { y: -wallH * 0.125, z: officeD / 2 },
+      stroke: false, color: 'rgba(40,40,70,0.3)',
+    });
+
+    // ── Window on back wall ──
+    new Zdog.Rect({
+      addTo: world,
+      width: 80, height: 40,
+      translate: { x: 0, y: -wallH * 0.55, z: -officeD / 2 + 3.5 },
+      stroke: 2, color: '#3a3a60',
+      fill: true,
+    });
+    // Window glow
+    new Zdog.Rect({
+      addTo: world,
+      width: 72, height: 34,
+      translate: { x: 0, y: -wallH * 0.55, z: -officeD / 2 + 4 },
+      stroke: 0, color: 'rgba(100,140,200,0.15)',
+      fill: true,
+    });
+
+    // ── Plant in corner ──
+    (function addPlant() {
+      const pa = new Zdog.Anchor({ addTo: world, translate: { x: -officeW / 2 + 25, y: 0, z: -officeD / 2 + 25 } });
+      // Pot
+      new Zdog.Cylinder({
+        addTo: pa, diameter: 14, length: 12,
+        translate: { y: -6 },
+        stroke: false, color: '#6B4226', frontFace: '#8B5A2B',
+      });
+      // Leaves (spheres)
+      new Zdog.Shape({ addTo: pa, stroke: 18, color: '#2d8a4e', translate: { y: -22 } });
+      new Zdog.Shape({ addTo: pa, stroke: 13, color: '#35a05a', translate: { y: -18, x: 6 } });
+      new Zdog.Shape({ addTo: pa, stroke: 11, color: '#40b868', translate: { y: -26, x: -3 } });
+    })();
+
+    // ── Plant in other corner ──
+    (function addPlant2() {
+      const pa = new Zdog.Anchor({ addTo: world, translate: { x: officeW / 2 - 25, y: 0, z: -officeD / 2 + 25 } });
+      new Zdog.Cylinder({
+        addTo: pa, diameter: 10, length: 10,
+        translate: { y: -5 }, stroke: false, color: '#6B4226',
+      });
+      new Zdog.Shape({ addTo: pa, stroke: 14, color: '#2d8a4e', translate: { y: -18 } });
+      new Zdog.Shape({ addTo: pa, stroke: 10, color: '#40b868', translate: { y: -22, x: 4 } });
+    })();
+
+    /* ─── Build Desks ─── */
+    function addDesk(px, pz) {
+      const da = new Zdog.Anchor({ addTo: world, translate: { x: px, z: pz } });
+      // Surface
+      new Zdog.Box({
+        addTo: da,
+        width: 52, height: 4, depth: 28,
+        translate: { y: -20 },
+        stroke: false, color: '#3a3a5c', topFace: '#44446a',
+      });
+      // Legs
+      var legColor = '#2e2e4a';
+      new Zdog.Box({ addTo: da, width: 3, height: 17, depth: 3, translate: { x: -22, y: -10, z: 10 }, stroke: false, color: legColor });
+      new Zdog.Box({ addTo: da, width: 3, height: 17, depth: 3, translate: { x:  22, y: -10, z: 10 }, stroke: false, color: legColor });
+      new Zdog.Box({ addTo: da, width: 3, height: 17, depth: 3, translate: { x: -22, y: -10, z:-10 }, stroke: false, color: legColor });
+      new Zdog.Box({ addTo: da, width: 3, height: 17, depth: 3, translate: { x:  22, y: -10, z:-10 }, stroke: false, color: legColor });
+      // Monitor
+      new Zdog.Box({
+        addTo: da,
+        width: 22, height: 15, depth: 2,
+        translate: { y: -31, z: -5 },
+        stroke: false, color: '#222', frontFace: '#4488aa',
+      });
+      // Monitor stand
+      new Zdog.Box({ addTo: da, width: 4, height: 8, depth: 2, translate: { y: -24, z: -5 }, stroke: false, color: '#333' });
+      // Chair (simple)
+      new Zdog.Box({
+        addTo: da,
+        width: 16, height: 3, depth: 16,
+        translate: { y: -12, z: 20 },
+        stroke: false, color: '#e63946', topFace: '#f04d5a',
+      });
+      new Zdog.Box({
+        addTo: da, width: 16, height: 14, depth: 3,
+        translate: { y: -20, z: 26 },
+        stroke: false, color: '#c02030',
+      });
+    }
+    DESK_SLOTS.forEach(function(s) { addDesk(s.x, s.z); });
+
+    /* ═══════ Agent Figure Factory ═══════ */
+    const agentMeshes = new Map();
+
+    function createAgentFigure(color, scale) {
+      var s = scale || 1;
+      var anchor = new Zdog.Anchor({ addTo: world });
+
+      // Torso
+      new Zdog.Box({
+        addTo: anchor,
+        width: 14 * s, height: 16 * s, depth: 8 * s,
+        translate: { y: -10 * s },
+        stroke: false, color: color,
+      });
+      // Arms
+      new Zdog.Shape({
+        addTo: anchor,
+        path: [{ y: 0 }, { y: 10 * s }],
+        translate: { x: -9 * s, y: -16 * s },
+        stroke: 4 * s, color: color,
+      });
+      new Zdog.Shape({
+        addTo: anchor,
+        path: [{ y: 0 }, { y: 10 * s }],
+        translate: { x: 9 * s, y: -16 * s },
+        stroke: 4 * s, color: color,
+      });
+      // Head
+      new Zdog.Shape({
+        addTo: anchor,
+        stroke: 12 * s,
+        color: '#f2c9a0',
+        translate: { y: -24 * s },
+      });
+      // Hair/hat
+      new Zdog.Shape({
+        addTo: anchor,
+        stroke: 8 * s,
+        color: color,
+        translate: { y: -29 * s },
+      });
+      // Left leg
+      new Zdog.Shape({
+        addTo: anchor,
+        path: [{ y: 0 }, { y: 10 * s }],
+        translate: { x: -4 * s, y: -2 * s },
+        stroke: 4.5 * s, color: '#3a3a5c',
+      });
+      // Right leg
+      new Zdog.Shape({
+        addTo: anchor,
+        path: [{ y: 0 }, { y: 10 * s }],
+        translate: { x: 4 * s, y: -2 * s },
+        stroke: 4.5 * s, color: '#3a3a5c',
+      });
+      // Selection ring (hidden)
+      var ring = new Zdog.Ellipse({
+        addTo: anchor,
+        diameter: 26 * s,
+        translate: { y: 2 },
+        rotate: { x: TAU / 4 },
+        stroke: 2.5, color: 'rgba(230,57,70,0)',
+        fill: false,
+      });
+
+      return { anchor: anchor, ring: ring };
+    }
+
+    /* ─── DOM Labels ─── */
+    function createLabelEl(name, state) {
+      var el = document.createElement('div');
+      el.className = 'agentLabel';
+      var dotColor = state === 'working' ? '#22c55e' : (state === 'starting' ? '#eab308' : '#71717a');
+      el.innerHTML =
+        '<div class="agentName">' + name + '</div>' +
+        '<div class="agentStatus">' +
+          '<span class="statusDot" style="background:' + dotColor + '"></span>' +
+          '<span class="statusText">' + state + '</span>' +
+        '</div>';
+      labelsEl.appendChild(el);
+      return el;
+    }
+
+    /* ─── 3D → 2D Projection (fixed isometric camera) ─── */
+    var rotX = -TAU / 8, rotY = TAU / 8;
+    var cosRX = Math.cos(rotX), sinRX = Math.sin(rotX);
+    var cosRY = Math.cos(rotY), sinRY = Math.sin(rotY);
+
+    function project(x, y, z) {
+      var rx = x * cosRY + z * sinRY;
+      var rz = -x * sinRY + z * cosRY;
+      var ry = y * cosRX - rz * sinRX;
+      return { sx: rx, sy: ry };
+    }
+
+    /* ═══════ State ═══════ */
+    var selectedId = null;
+    var frameCount = 0;
+    var lastDataHash = '';
+
+    function getAgentList() {
+      var agents = [];
+      var gwOk = dash.status && dash.status.gateway &&
+                 dash.status.gateway.running && dash.status.gateway.reachable;
+
+      // Main agent
+      agents.push({
+        id: '__main__', name: 'Main Agent',
+        state: gwOk ? 'working' : (dash.status && dash.status.gateway && dash.status.gateway.starting ? 'starting' : 'idle'),
+        isSub: false, parentId: null, slotIndex: 0,
+      });
+
+      // Channel agents
+      var channels = (dash.overview && dash.overview.channels) || {};
+      var idx = 1;
+      for (var chName in channels) {
+        if (!channels.hasOwnProperty(chName)) continue;
+        var cfg = channels[chName];
+        agents.push({
+          id: 'ch_' + chName,
+          name: chName.charAt(0).toUpperCase() + chName.slice(1),
+          state: (cfg.enabled && gwOk) ? 'working' : (cfg.enabled ? 'starting' : 'idle'),
+          isSub: false, parentId: null, slotIndex: idx,
+        });
+        idx++;
+      }
+
+      // Sub-agents
+      var maxSub = (dash.overview && dash.overview.agents &&
+                    dash.overview.agents.subagents &&
+                    dash.overview.agents.subagents.maxConcurrent) || 0;
+      for (var si = 0; si < Math.min(maxSub, 6); si++) {
+        agents.push({
+          id: 'sub_' + si,
+          name: 'Sub-agent ' + (si + 1),
+          state: 'idle',
+          isSub: true, parentId: '__main__', slotIndex: si,
+        });
+      }
+
+      return agents;
+    }
+
+    /* ─── Build / rebuild agent meshes ─── */
+    function rebuildAgents() {
+      agentMeshes.forEach(function(m) {
+        m.anchor.remove();
+        if (m.labelEl && m.labelEl.parentNode) m.labelEl.parentNode.removeChild(m.labelEl);
+        if (m.connector) m.connector.remove();
+      });
+      agentMeshes.clear();
+
+      var agents = getAgentList();
+
+      agents.forEach(function(ag, i) {
+        var scale = ag.isSub ? 0.6 : 1;
+        var color = ag.isSub ? '#6699cc' : AGENT_COLORS[i % AGENT_COLORS.length];
+        var fig = createAgentFigure(color, scale);
+
+        // Position
+        var pos;
+        if (ag.isSub) {
+          var mainSlot = DESK_SLOTS[0];
+          var angle = (ag.slotIndex / Math.max(1, Math.min(6, agents.filter(function(a){return a.isSub;}).length))) * TAU + TAU / 12;
+          pos = {
+            x: mainSlot.x + Math.cos(angle) * 52,
+            z: mainSlot.z + 30 + Math.sin(angle) * 30,
+          };
+        } else {
+          var slot = DESK_SLOTS[ag.slotIndex % DESK_SLOTS.length];
+          pos = { x: slot.x, z: slot.z + 28 };
+        }
+
+        fig.anchor.translate.x = pos.x;
+        fig.anchor.translate.z = pos.z;
+        fig.anchor.translate.y = -4;
+
+        // Label
+        var labelEl = createLabelEl(ag.name, ag.state);
+
+        // Connector for sub-agents
+        var connector = null;
+        if (ag.isSub && ag.parentId) {
+          connector = new Zdog.Shape({
+            addTo: world,
+            path: [{ x: 0, y: -10, z: 0 }, { x: 0, y: -10, z: 0 }],
+            closed: false, stroke: 1.5,
+            color: 'rgba(100,150,210,0.18)',
+          });
+        }
+
+        agentMeshes.set(ag.id, {
+          anchor: fig.anchor, ring: fig.ring,
+          labelEl: labelEl, connector: connector,
+          agent: ag, pos: { x: pos.x, z: pos.z },
+          lastState: ag.state,
+          _screenX: 0, _screenY: 0,
+        });
+      });
+    }
+
+    /* ═══════ Animation Loop ═══════ */
+    function tick() {
+      frameCount++;
+
+      // Detect data changes → rebuild
+      var channels = (dash.overview && dash.overview.channels) || {};
+      var chKeys = Object.keys(channels).join(',');
+      var maxSub = String((dash.overview && dash.overview.agents &&
+                           dash.overview.agents.subagents &&
+                           dash.overview.agents.subagents.maxConcurrent) || 0);
+      var gwRunning = String(!!(dash.status && dash.status.gateway && dash.status.gateway.running));
+      var hash = chKeys + '|' + maxSub + '|' + gwRunning;
+      if (hash !== lastDataHash) {
+        lastDataHash = hash;
+        rebuildAgents();
+      }
+
+      // Current agent states
+      var currentAgents = getAgentList();
+      var agentLookup = {};
+      currentAgents.forEach(function(a) { agentLookup[a.id] = a; });
+
+      agentMeshes.forEach(function(m, id) {
+        var ag = agentLookup[id];
+        if (!ag) return;
+
+        // Idle bob / working bounce
+        var speed = ag.state === 'working' ? 0.09 : 0.025;
+        var amp = ag.state === 'working' ? 2 : 0.7;
+        var bob = Math.sin(frameCount * speed + m.pos.x * 0.05) * amp;
+        m.anchor.translate.y = -4 + bob;
+
+        // Working agents: slight body rotation wobble
+        if (ag.state === 'working') {
+          m.anchor.rotate.y = Math.sin(frameCount * 0.04 + m.pos.x) * 0.08;
+        } else {
+          m.anchor.rotate.y = 0;
+        }
+
+        // Update status label text when changed
+        if (ag.state !== m.lastState) {
+          m.lastState = ag.state;
+          var dotEl = m.labelEl.querySelector('.statusDot');
+          var txtEl = m.labelEl.querySelector('.statusText');
+          if (txtEl) txtEl.textContent = ag.state;
+          if (dotEl) {
+            dotEl.style.background = ag.state === 'working' ? '#22c55e' :
+                                     ag.state === 'starting' ? '#eab308' : '#71717a';
+          }
+        }
+
+        // Selection ring
+        var isSel = selectedId === id;
+        m.ring.color = isSel ? 'rgba(230,57,70,0.7)' : 'rgba(230,57,70,0)';
+        if (isSel) {
+          m.labelEl.classList.add('selected');
+        } else {
+          m.labelEl.classList.remove('selected');
+        }
+
+        // Connector endpoints
+        if (m.connector && ag.parentId) {
+          var parent = agentMeshes.get(ag.parentId);
+          if (parent) {
+            m.connector.path = [
+              { x: parent.anchor.translate.x, y: parent.anchor.translate.y - 10, z: parent.anchor.translate.z },
+              { x: m.anchor.translate.x, y: m.anchor.translate.y - 6, z: m.anchor.translate.z },
+            ];
+            m.connector.updatePath();
+          }
+        }
+      });
+
+      // Update DOM label positions
+      var wrapRect = canvas.parentElement.getBoundingClientRect();
+      var cw = wrapRect.width, ch = wrapRect.height;
+      var zoom = illo.zoom;
+      var cx = cw / 2, cy = ch / 2;
+
+      agentMeshes.forEach(function(m) {
+        // Project head position for label
+        var headY = m.anchor.translate.y - (m.agent.isSub ? 22 : 34);
+        var p = project(m.anchor.translate.x, headY, m.anchor.translate.z);
+        var sx = cx + p.sx * zoom;
+        var sy = cy + p.sy * zoom;
+        m.labelEl.style.left = sx + 'px';
+        m.labelEl.style.top = sy + 'px';
+
+        // Store body center for hit testing
+        var bodyP = project(m.anchor.translate.x, m.anchor.translate.y - 12, m.anchor.translate.z);
+        m._screenX = cx + bodyP.sx * zoom;
+        m._screenY = cy + bodyP.sy * zoom;
+      });
+
+      illo.updateRenderGraph();
+      requestAnimationFrame(tick);
+    }
+
+    /* ─── Click Hit-Testing ─── */
+    canvas.addEventListener('click', function(e) {
+      var wrapRect = canvas.parentElement.getBoundingClientRect();
+      var mx = e.clientX - wrapRect.left;
+      var my = e.clientY - wrapRect.top;
+
+      var nearId = null;
+      var nearDist = 28;
+
+      agentMeshes.forEach(function(m, id) {
+        var dx = mx - m._screenX;
+        var dy = my - m._screenY;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < nearDist) { nearDist = dist; nearId = id; }
+      });
+
+      selectedId = nearId;
+      dash.selectedVizAgent = nearId;
+
+      // Scroll corresponding card into view
+      if (nearId === '__main__') {
+        var hero = document.querySelector('.card.mb-8.relative');
+        if (hero) hero.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } else if (nearId && nearId.indexOf('ch_') === 0) {
+        // Channel cards have the channel name in x-text
+        var chName = nearId.slice(3);
+        var cards = document.querySelectorAll('.card.viz-selected');
+        cards.forEach(function(c) { c.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+      }
+    });
+
+    // Deselect on click outside viz (optional)
+    document.addEventListener('click', function(e) {
+      if (!canvas.contains(e.target) && !e.target.closest('.card')) {
+        selectedId = null;
+        dash.selectedVizAgent = null;
+      }
+    });
+
+    /* ─── Start ─── */
+    tick();
+  }
+
+  // Boot
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    requestAnimationFrame(boot);
+  }
+})();
 </script>
 </body>
 </html>
