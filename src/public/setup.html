@@ -182,6 +182,8 @@
         devices: [],
         devicesPending: [],
         devicesPaired: [],
+        gatewayToken: '',
+        tokenCopied: false,
 
         get currentGroup() {
           return this.authGroups.find(g => g.value === this.selectedGroup);
@@ -208,6 +210,7 @@
             this.configured = j.configured;
             this.openclawVersion = j.openclawVersion || '';
             this.tuiEnabled = j.tuiEnabled || false;
+            this.gatewayToken = j.gatewayToken || '';
             this.status = j.configured ? 'Configured - open /openclaw' : 'Not configured - run setup below';
             this.authGroups = j.authGroups || [];
             if (this.authGroups.length > 0) {
@@ -420,9 +423,6 @@
               this.devicesPending = [];
               this.devicesPaired = [];
             }
-            if (j.raw) {
-              this.log += '[devices] ' + j.raw.trim() + '\n';
-            }
           } catch (e) {
             this.log += '✗ Failed to load devices: ' + String(e) + '\n';
           } finally {
@@ -472,6 +472,26 @@
           } catch (e) {
             this.log += '✗ Error: ' + String(e) + '\n';
             this.devicesLoading = false;
+          }
+        },
+
+        async copyGatewayToken() {
+          try {
+            await navigator.clipboard.writeText(this.gatewayToken);
+            this.tokenCopied = true;
+            setTimeout(() => { this.tokenCopied = false; }, 2500);
+          } catch (e) {
+            // Fallback for non-HTTPS contexts
+            const ta = document.createElement('textarea');
+            ta.value = this.gatewayToken;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            ta.remove();
+            this.tokenCopied = true;
+            setTimeout(() => { this.tokenCopied = false; }, 2500);
           }
         }
       }));
@@ -534,29 +554,30 @@
             <li class="flex items-start gap-3">
               <span class="step-num">4</span>
               <div class="relative">
+                <span class="text-[15px] text-[var(--color-text-secondary)] leading-relaxed"><strong class="text-[var(--color-text-primary)]">Copy Gateway Token</strong> and paste it in the dashboard under <strong class="text-[var(--color-text-primary)]">Overview → Gateway Token</strong></span>
+                <div class="info-tooltip inline-flex ml-1.5 relative mt-[2px]">i
+                  <div class="info-tooltip-content">OpenClaw now requires you to manually set the gateway token. Copy it from here, open the dashboard, go to Overview and paste it in the Gateway Token field.</div>
+                </div>
+              </div>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="step-num">5</span>
+              <div class="relative">
+                <span class="text-[15px] text-[var(--color-text-secondary)] leading-relaxed">Open <strong class="text-[var(--color-text-primary)]">Manage Devices</strong> and approve the pairing request</span>
+                <div class="info-tooltip inline-flex ml-1.5 relative mt-[2px]">i
+                  <div class="info-tooltip-content">Each new browser requires a one-time device approval. Open the dashboard first, then come back and approve the pending request.</div>
+                </div>
+              </div>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="step-num">6</span>
+              <div class="relative">
                 <span class="text-[15px] text-[var(--color-text-secondary)] leading-relaxed">Authorize channel bots via
                   <strong class="text-[var(--color-text-primary)]">Approve Pairing</strong></span>
                 <div class="info-tooltip inline-flex ml-1.5 relative mt-[2px]">i
                   <div class="info-tooltip-content">Send any message to
                     your bot on Telegram or Discord. It responds with a pairing code — enter that code here to grant
                     access.</div>
-                </div>
-              </div>
-            </li>
-            <li class="flex items-start gap-3">
-              <span class="step-num">5</span>
-              <p class="text-[15px] text-[var(--color-text-primary)] leading-relaxed">Launch the <strong>OpenClaw
-                  dashboard</strong></p>
-            </li>
-            <li class="flex items-start gap-3">
-              <span class="step-num">6</span>
-              <div class="relative">
-                <span class="text-[15px] text-[var(--color-text-secondary)] leading-relaxed">New browser? Go to <strong
-                    class="text-[var(--color-text-primary)]">Approve Pairing</strong> and approve it</span>
-                <div class="info-tooltip inline-flex ml-1.5 relative mt-[2px]">i
-                  <div class="info-tooltip-content">Each new browser
-                    requires a one-time device approval. Open the dashboard first, then come back and approve the
-                    pending request.</div>
                 </div>
               </div>
             </li>
@@ -790,6 +811,26 @@
 
                   <!-- Primary Actions -->
                   <section class="card space-y-4">
+                    <!-- Copy Gateway Token -->
+                    <div class="bg-[rgba(230,57,70,0.06)] border border-[var(--color-accent)]/20 rounded-xl p-4">
+                      <div class="flex items-center gap-2 mb-2">
+                        <svg class="w-4 h-4 text-[var(--color-accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                        </svg>
+                        <span class="text-[13px] font-semibold text-[var(--color-accent)]">Gateway Token</span>
+                      </div>
+                      <button @click="copyGatewayToken()" class="btn btn-primary w-full text-[15px] mb-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                        </svg>
+                        <span x-show="!tokenCopied">Copy Gateway Token</span>
+                        <span x-show="tokenCopied" class="text-[var(--color-success)]">✓ Copied!</span>
+                      </button>
+                      <p class="text-[12px] text-[var(--color-text-secondary)] leading-relaxed">
+                        Paste this token in the dashboard under <strong class="text-[var(--color-text-primary)]">Overview → Gateway Token</strong>
+                      </p>
+                    </div>
+
                     <a href="/openclaw" target="_blank" class="btn btn-success w-full text-[16px] py-4">
                       Launch Dashboard
                       <svg class="w-5 h-5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -797,6 +838,14 @@
                           d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                       </svg>
                     </a>
+                    <button @click="openDevicesModal()" :disabled="loading"
+                      class="btn btn-secondary w-full text-[15px]">
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      Manage Devices
+                    </button>
                     <button @click="openPairingModal()" :disabled="loading"
                       class="btn btn-secondary w-full text-[15px]">
                       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -804,14 +853,6 @@
                           d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                       </svg>
                       Authorize Channel
-                    </button>
-                    <button @click="openDevicesModal()" :disabled="loading"
-                      class="btn btn-secondary w-full text-[15px]">
-                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                      </svg>
-                      Approve Pairing
                     </button>
                   </section>
 

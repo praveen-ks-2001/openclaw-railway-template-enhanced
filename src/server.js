@@ -484,6 +484,7 @@ app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
     channelsAddHelp: channelsHelp,
     authGroups,
     tuiEnabled: ENABLE_WEB_TUI,
+    gatewayToken: OPENCLAW_GATEWAY_TOKEN,
   });
 });
 
@@ -804,10 +805,18 @@ app.post("/setup/api/doctor", requireSetupAuth, async (_req, res) => {
 app.get("/setup/api/devices", requireSetupAuth, async (_req, res) => {
   const args = ["devices", "list", "--json", "--token", OPENCLAW_GATEWAY_TOKEN];
   const result = await runCmd(OPENCLAW_NODE, clawArgs(args));
+  console.log(`[devices] list exit=${result.code} output=${result.output}`);
   try {
-    const data = JSON.parse(result.output);
+    const jsonMatch = result.output.match(/(\{[\s\S]*\}|\[[\s\S]*\])\s*$/);
+    if (!jsonMatch) {
+      console.warn("[devices] no JSON found in output");
+      return res.json({ ok: result.code === 0, raw: result.output });
+    }
+    const data = JSON.parse(jsonMatch[1]);
+    console.log(`[devices] parsed keys=${Object.keys(data)} pending=${JSON.stringify(data.pending)} paired=${JSON.stringify(data.paired)}`);
     return res.json({ ok: true, data, raw: result.output });
-  } catch {
+  } catch (parseErr) {
+    console.warn(`[devices] JSON parse failed: ${parseErr.message}`);
     return res.json({ ok: result.code === 0, raw: result.output });
   }
 });
@@ -1061,7 +1070,9 @@ const PROXY_ORIGIN = process.env.RAILWAY_PUBLIC_DOMAIN
   : GATEWAY_TARGET;
 
 proxy.on("proxyReq", (proxyReq, req, res) => {
-  proxyReq.setHeader("Authorization", `Bearer ${OPENCLAW_GATEWAY_TOKEN}`);
+  if (!req.url?.startsWith("/hooks/")) {
+    proxyReq.setHeader("Authorization", `Bearer ${OPENCLAW_GATEWAY_TOKEN}`);
+  }
   proxyReq.setHeader("Origin", PROXY_ORIGIN);
 });
 
@@ -1094,7 +1105,8 @@ app.use(async (req, res) => {
   }
 
   if (req.path === "/openclaw" && !req.query.token) {
-    return res.redirect(`/openclaw?token=${OPENCLAW_GATEWAY_TOKEN}`);
+    // Token is no longer auto-injected via URL.
+    // Users must manually paste it in Dashboard > Overview > Gateway Token.
   }
 
   return proxy.web(req, res, { target: GATEWAY_TARGET });
