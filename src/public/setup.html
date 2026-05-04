@@ -169,6 +169,10 @@
         slackAppToken: '',
         model: '',
         log: '',
+        loginUrl: '',
+        loginCode: '',
+        setupError: '',
+        setupStreamTail: '',
         loading: false,
         pairingChannel: '',
         pairingCode: '',
@@ -187,6 +191,31 @@
 
         get currentGroup() {
           return this.authGroups.find(g => g.value === this.selectedGroup);
+        },
+
+        get authRequiresSecret() {
+          return ![
+            'openai-codex',
+            'openai-codex-device-code',
+            'google-gemini-cli',
+            'github-copilot',
+            'ollama',
+            'vllm',
+            'sglang'
+          ].includes(this.selectedAuth);
+        },
+
+        get authGuidance() {
+          if (this.selectedAuth === 'openai-codex-device-code') {
+            return 'No API key needed. Click Deploy, then open the ChatGPT URL and enter the device code shown below.';
+          }
+          if (this.selectedAuth === 'openai-codex') {
+            return 'Browser login needs an interactive terminal to paste the redirect URL. Pick OpenAI Codex device pairing instead.';
+          }
+          if (!this.authRequiresSecret) {
+            return 'No API key is needed for this auth method.';
+          }
+          return '';
         },
 
         async init() {
@@ -244,6 +273,10 @@
         },
 
         async runSetup() {
+          this.loginUrl = '';
+          this.loginCode = '';
+          this.setupError = '';
+          this.setupStreamTail = '';
           const payload = {
             authChoice: this.selectedAuth,
             authSecret: this.authSecret,
@@ -264,15 +297,53 @@
               headers: { 'content-type': 'application/json' },
               body: JSON.stringify(payload)
             });
-            const text = await res.text();
-            let j;
-            try { j = JSON.parse(text); } catch (_e) { j = { ok: false, output: text }; }
-            this.log += (j.output || JSON.stringify(j, null, 2));
+            if (res.body) {
+              const reader = res.body.getReader();
+              const decoder = new TextDecoder();
+              while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                this.processSetupChunk(decoder.decode(value, { stream: true }));
+              }
+              this.processSetupChunk(decoder.decode());
+            } else {
+              this.processSetupChunk(await res.text());
+            }
+            if (!res.ok && !this.setupError) {
+              this.setupError = 'Setup request failed with HTTP ' + res.status + '.';
+            }
             await this.refreshStatus();
           } catch (e) {
-            this.log += '\nError: ' + String(e) + '\n';
+            this.setupError = 'Setup request failed.';
+            this.processSetupChunk('\nError: ' + String(e) + '\n');
           } finally {
             this.loading = false;
+          }
+        },
+
+        processSetupChunk(chunk) {
+          if (!chunk) return;
+          this.log += chunk;
+          const scanText = this.setupStreamTail + chunk;
+          this.setupStreamTail = scanText.slice(-1000);
+          this.extractLoginDetails(scanText);
+          this.extractSetupFailure(scanText);
+        },
+
+        extractLoginDetails(text) {
+          const urlMatch = text.match(/https:\/\/auth\.openai\.com\/codex\/device[^\s)]*/);
+          if (urlMatch) this.loginUrl = urlMatch[0];
+
+          const codeMatches = [...text.matchAll(/\bCode:\s*([A-Z0-9][A-Z0-9-]{3,})\b/g)];
+          const visibleCode = codeMatches.map(m => m[1]).find(code => code !== 'shown');
+          if (visibleCode) this.loginCode = visibleCode;
+        },
+
+        extractSetupFailure(text) {
+          if (text.includes('[setup] Internal error')) {
+            this.setupError = 'Setup hit an internal error. Review the log below.';
+          } else if (text.includes('[setup] Failed')) {
+            this.setupError = 'Setup failed. Review the log below.';
           }
         },
 
@@ -588,8 +659,18 @@
             </li>
           </ol>
 
-          <div class="mt-8 text-[12px] text-[var(--color-text-muted)]">
-            <span x-show="openclawVersion" x-text="'v' + openclawVersion"></span>
+          <div class="mt-8 space-y-3">
+            <div class="rounded-lg border border-[var(--color-warning)]/25 bg-[var(--color-warning)]/5 px-3.5 py-3">
+              <p class="text-[12px] uppercase tracking-[0.12em] font-semibold text-[var(--color-warning)] mb-1.5">OpenClaw version</p>
+              <p class="text-[13px] text-[var(--color-text-secondary)] leading-relaxed">
+                This template targets <strong class="text-[var(--color-text-primary)]">2026.5.X</strong> or newer.
+                Set <code class="text-[12px] bg-black/30 px-1.5 py-0.5 rounded">OPENCLAW_VERSION=2026.5.X</code>
+                in Railway → Variables to pin a compatible release.
+              </p>
+            </div>
+            <div class="text-[12px] text-[var(--color-text-muted)]">
+              <span x-show="openclawVersion" x-text="'Installed: v' + openclawVersion"></span>
+            </div>
           </div>
         </div>
       </aside>
@@ -627,17 +708,20 @@
                       </template>
                     </select>
                   </div>
-                  <div>
+                  <div x-show="authRequiresSecret">
                     <label
                       class="block text-[13px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-2">Secret
                       Key</label>
                     <input x-model="authSecret" type="password" placeholder="Enter your API key or access token"
                       class="input-field" />
                   </div>
+                  <div x-show="authGuidance"
+                    class="rounded-lg border border-[var(--color-accent)]/25 bg-[var(--color-accent)]/5 px-4 py-3 text-[14px] text-[var(--color-text-secondary)] leading-relaxed"
+                    x-text="authGuidance"></div>
                   <div>
                     <label
                       class="block text-[13px] uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-2">Model</label>
-                    <input x-model="model" type="text" placeholder="e.g. openai/gpt-4.1, anthropic/claude-sonnet-4"
+                    <input x-model="model" type="text" placeholder="e.g. anthropic/claude-opus-4-7, minimax/MiniMax-M2.7"
                       class="input-field" />
                     <p class="text-[13px] text-[var(--color-text-muted)] mt-2">Use the format provider/model-name</p>
                   </div>
@@ -741,6 +825,30 @@
                   </button>
                   <button @click="resetSetup()" :disabled="loading" class="btn btn-danger">Reset</button>
                 </div>
+
+                <div x-show="loginUrl || loginCode"
+                  class="card !p-5 mb-6 border-[var(--color-accent)]/40 bg-[var(--color-accent)]/5">
+                  <p class="text-[12px] uppercase tracking-[0.12em] font-semibold text-[var(--color-accent)] mb-3">
+                    ChatGPT Login
+                  </p>
+                  <div class="space-y-3">
+                    <div x-show="loginUrl">
+                      <p class="text-[12px] uppercase tracking-wide text-[var(--color-text-muted)] mb-1">Open this URL</p>
+                      <a x-show="loginUrl" :href="loginUrl" target="_blank" rel="noopener noreferrer"
+                        class="text-[14px] text-[var(--color-accent)] hover:underline break-all" x-text="loginUrl"></a>
+                    </div>
+                    <div x-show="loginCode">
+                      <p class="text-[12px] uppercase tracking-wide text-[var(--color-text-muted)] mb-1">Enter this code</p>
+                      <code class="block text-[20px] font-semibold tracking-[0.25em] text-[var(--color-text-primary)] bg-black/30 border border-[var(--color-border)] rounded-lg px-4 py-2.5"
+                        x-text="loginCode"></code>
+                    </div>
+                  </div>
+                </div>
+
+                <div x-show="setupError"
+                  class="rounded-lg border border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 px-4 py-3 mb-6 text-[14px] text-[var(--color-danger)]"
+                  x-text="setupError"></div>
+
                 <div x-show="log" class="log-box mb-8" x-text="log"></div>
               </section>
             </div>

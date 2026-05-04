@@ -1,8 +1,10 @@
 import childProcess from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import express from "express";
 import httpProxy from "http-proxy";
@@ -86,6 +88,90 @@ const TUI_MAX_SESSION_MS = Number.parseInt(
 
 function clawArgs(args) {
   return [OPENCLAW_ENTRY, ...args];
+}
+
+function stripAnsi(value) {
+  return String(value)
+    .replace(/\x1b\]8;;.*?\x1b\\|\x1b\]8;;\x1b\\/g, "")
+    .replace(/\x1b\[[\x20-\x3f]*[\x40-\x7e]/g, "");
+}
+
+function isTransientProgressLine(line) {
+  return /^[\s◐◓◑◒⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏.-]*(Requesting device code|Waiting for device authorization|Exchanging device code)/.test(
+    line,
+  );
+}
+
+function cleanPtyOutput(value) {
+  const cleaned = stripAnsi(value)
+    .split(/\r|\n/)
+    .filter((line) => line && !isTransientProgressLine(line))
+    .join("\n");
+  return cleaned ? `${cleaned}\n` : "";
+}
+
+let deviceBootstrapSdkPromise = null;
+
+function resolveDeviceBootstrapSdkPath() {
+  const entryPath = path.resolve(OPENCLAW_ENTRY);
+  try {
+    const requireFromOpenclaw = createRequire(entryPath);
+    return requireFromOpenclaw.resolve("openclaw/plugin-sdk/device-bootstrap");
+  } catch {
+    const openclawRoot = path.dirname(path.dirname(entryPath));
+    return path.join(openclawRoot, "dist", "plugin-sdk", "device-bootstrap.js");
+  }
+}
+
+async function loadDeviceBootstrapSdk() {
+  if (!deviceBootstrapSdkPromise) {
+    deviceBootstrapSdkPromise = import(
+      pathToFileURL(resolveDeviceBootstrapSdkPath()).href
+    ).catch((err) => {
+      deviceBootstrapSdkPromise = null;
+      throw err;
+    });
+  }
+  return deviceBootstrapSdkPromise;
+}
+
+function devicePairingTimestamp(request) {
+  const ts = request?.ts;
+  if (typeof ts === "number") return ts;
+  if (typeof ts === "string") {
+    const parsed = Date.parse(ts);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
+function newestPendingDevicePairing(pending) {
+  if (!Array.isArray(pending) || pending.length === 0) return null;
+  return pending.reduce((latest, current) =>
+    devicePairingTimestamp(current) > devicePairingTimestamp(latest)
+      ? current
+      : latest,
+  );
+}
+
+function describeDeviceApprovalForbidden(result) {
+  const scope = result?.scope || "unknown";
+  const role = result?.role || "unknown";
+
+  switch (result?.reason) {
+    case "caller-scopes-required":
+      return `missing scope: ${scope}`;
+    case "caller-missing-scope":
+      return `missing scope: ${scope}`;
+    case "scope-outside-requested-roles":
+      return `invalid scope for requested roles: ${scope}`;
+    case "bootstrap-role-not-allowed":
+      return `bootstrap profile does not allow role: ${role}`;
+    case "bootstrap-scope-not-allowed":
+      return `bootstrap profile does not allow scope: ${scope}`;
+    default:
+      return "Device approval is forbidden by bootstrap policy.";
+  }
 }
 
 function configPath() {
@@ -384,9 +470,14 @@ app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
     {
       value: "openai",
       label: "OpenAI",
-      hint: "API key",
+      hint: "API key / Codex",
       options: [
         { value: "openai-api-key", label: "OpenAI API key" },
+        {
+          value: "openai-codex-device-code",
+          label: "OpenAI Codex device pairing",
+          hint: "ChatGPT login without an API key",
+        },
       ],
     },
     {
@@ -437,17 +528,22 @@ app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
     {
       value: "minimax",
       label: "MiniMax",
-      hint: "M2.1 (recommended)",
+      hint: "M2.7 (recommended)",
       options: [
-        { value: "minimax-global-api", label: "MiniMax M2.1" },
-        { value: "minimax-global-api-lightning", label: "MiniMax M2.1 Lightning" },
+        { value: "minimax-global-api", label: "MiniMax API key (Global)" },
+        { value: "minimax-cn-api", label: "MiniMax API key (CN)" },
       ],
     },
     {
       value: "qwen",
       label: "Qwen",
-      hint: "OAuth",
-      options: [{ value: "qwen-portal", label: "Qwen OAuth" }],
+      hint: "Standard / Coding Plan API key",
+      options: [
+        { value: "modelstudio-api-key", label: "Coding Plan (Global)" },
+        { value: "modelstudio-api-key-cn", label: "Coding Plan (CN)" },
+        { value: "modelstudio-standard-api-key", label: "Standard Plan (Global)" },
+        { value: "modelstudio-standard-api-key-cn", label: "Standard Plan (CN)" },
+      ],
     },
     {
       value: "copilot",
@@ -488,12 +584,15 @@ app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
   });
 });
 
+function requiresInteractiveOnboarding(payload) {
+  return payload.authChoice === "openai-codex-device-code";
+}
+
 function buildOnboardArgs(payload) {
+  const interactive = requiresInteractiveOnboarding(payload);
   const args = [
     "onboard",
-    "--non-interactive",
     "--accept-risk",
-    "--json",
     "--no-install-daemon",
     "--skip-health",
     "--workspace",
@@ -510,6 +609,19 @@ function buildOnboardArgs(payload) {
     "quickstart",
   ];
 
+  if (interactive) {
+    args.push(
+      "--mode",
+      "local",
+      "--skip-channels",
+      "--skip-skills",
+      "--skip-search",
+      "--skip-ui",
+    );
+  } else {
+    args.push("--non-interactive", "--json");
+  }
+
   if (payload.authChoice) {
     args.push("--auth-choice", payload.authChoice);
 
@@ -524,7 +636,11 @@ function buildOnboardArgs(payload) {
       "gemini-api-key": "--gemini-api-key",
       "zai-api-key": "--zai-api-key",
       "minimax-global-api": "--minimax-api-key",
-      "minimax-global-api-lightning": "--minimax-api-key",
+      "minimax-cn-api": "--minimax-api-key",
+      "modelstudio-api-key": "--modelstudio-api-key",
+      "modelstudio-api-key-cn": "--modelstudio-api-key-cn",
+      "modelstudio-standard-api-key": "--modelstudio-standard-api-key",
+      "modelstudio-standard-api-key-cn": "--modelstudio-standard-api-key-cn",
       "synthetic-api-key": "--synthetic-api-key",
       "opencode-zen": "--opencode-zen-api-key",
     };
@@ -540,8 +656,9 @@ function buildOnboardArgs(payload) {
 
 function runCmd(cmd, args, opts = {}) {
   return new Promise((resolve) => {
+    const { autoInputs: _autoInputs, onOutput, stripOutput, ...spawnOpts } = opts;
     const proc = childProcess.spawn(cmd, args, {
-      ...opts,
+      ...spawnOpts,
       env: {
         ...process.env,
         OPENCLAW_STATE_DIR: STATE_DIR,
@@ -550,8 +667,14 @@ function runCmd(cmd, args, opts = {}) {
     });
 
     let out = "";
-    proc.stdout?.on("data", (d) => (out += d.toString("utf8")));
-    proc.stderr?.on("data", (d) => (out += d.toString("utf8")));
+    const append = (d) => {
+      const rawChunk = d.toString("utf8");
+      const streamChunk = stripOutput ? stripAnsi(rawChunk) : rawChunk;
+      out += rawChunk;
+      onOutput?.(streamChunk);
+    };
+    proc.stdout?.on("data", append);
+    proc.stderr?.on("data", append);
 
     proc.on("error", (err) => {
       out += `\n[spawn error] ${String(err)}\n`;
@@ -562,8 +685,63 @@ function runCmd(cmd, args, opts = {}) {
   });
 }
 
+function runPtyCmd(cmd, args, opts = {}) {
+  return new Promise((resolve) => {
+    let out = "";
+    const autoInputs = opts.autoInputs ?? [];
+    const sentAutoInputs = new Set();
+    let proc;
+    try {
+      proc = pty.spawn(cmd, args, {
+        name: "xterm-color",
+        cols: 100,
+        rows: 30,
+        cwd: opts.cwd ?? process.cwd(),
+        env: {
+          ...process.env,
+          OPENCLAW_STATE_DIR: STATE_DIR,
+          OPENCLAW_WORKSPACE_DIR: WORKSPACE_DIR,
+          // Force OpenClaw's local device-code branch so Railway setup can show
+          // the short code in the web UI instead of hiding it as remote-only.
+          DISPLAY: process.env.DISPLAY || ":0",
+          WAYLAND_DISPLAY: process.env.WAYLAND_DISPLAY || "wayland-0",
+          SSH_CLIENT: "",
+          SSH_TTY: "",
+          SSH_CONNECTION: "",
+          FORCE_COLOR: "0",
+          NO_COLOR: "1",
+        },
+      });
+    } catch (err) {
+      out += `\n[spawn error] ${String(err)}\n`;
+      opts.onOutput?.(out);
+      resolve({ code: 127, output: out });
+      return;
+    }
+
+    proc.onData((data) => {
+      const chunk = opts.cleanOutput ? cleanPtyOutput(data) : stripAnsi(data);
+      if (!chunk) return;
+      out += chunk;
+      for (const { input, pattern } of autoInputs) {
+        const key = String(pattern);
+        if (sentAutoInputs.has(key) || !pattern.test(out)) continue;
+        sentAutoInputs.add(key);
+        proc.write(input);
+      }
+      opts.onOutput?.(chunk);
+    });
+
+    proc.onExit(({ exitCode }) => {
+      resolve({ code: exitCode ?? 0, output: out });
+    });
+  });
+}
+
 const VALID_AUTH_CHOICES = [
   "openai-api-key",
+  "openai-codex",
+  "openai-codex-device-code",
   "apiKey",
   "gemini-api-key",
   "openrouter-api-key",
@@ -572,8 +750,11 @@ const VALID_AUTH_CHOICES = [
   "kimi-code-api-key",
   "zai-api-key",
   "minimax-global-api",
-  "minimax-global-api-lightning",
-  "qwen-portal",
+  "minimax-cn-api",
+  "modelstudio-api-key",
+  "modelstudio-api-key-cn",
+  "modelstudio-standard-api-key",
+  "modelstudio-standard-api-key-cn",
   "github-copilot",
   "copilot-proxy",
   "synthetic-api-key",
@@ -583,6 +764,9 @@ const VALID_AUTH_CHOICES = [
 function validatePayload(payload) {
   if (payload.authChoice && !VALID_AUTH_CHOICES.includes(payload.authChoice)) {
     return `Invalid authChoice: ${payload.authChoice}`;
+  }
+  if (payload.authChoice === "openai-codex") {
+    return "OpenAI Codex browser login needs redirect-url input in an interactive terminal. Choose OpenAI Codex device pairing in web setup.";
   }
   const stringFields = [
     "telegramToken",
@@ -601,14 +785,16 @@ function validatePayload(payload) {
 }
 
 app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
+  const stream = (chunk) => {
+    if (chunk) res.write(chunk);
+  };
+
   try {
     if (isConfigured()) {
       await ensureGatewayRunning();
-      return res.json({
-        ok: true,
-        output:
-          "Already configured.\nUse Reset setup if you want to rerun onboarding.\n",
-      });
+      return res
+        .type("text/plain")
+        .send("Already configured.\nUse Reset setup if you want to rerun onboarding.\n");
     }
 
     fs.mkdirSync(STATE_DIR, { recursive: true });
@@ -617,18 +803,35 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
     const payload = req.body || {};
     const validationError = validatePayload(payload);
     if (validationError) {
-      return res.status(400).json({ ok: false, output: validationError });
+      return res.status(400).type("text/plain").send(`${validationError}\n`);
     }
-    const onboardArgs = buildOnboardArgs(payload);
-    const onboard = await runCmd(OPENCLAW_NODE, clawArgs(onboardArgs));
 
-    let extra = "";
-    extra += `\n[setup] Onboarding exit=${onboard.code} configured=${isConfigured()}\n`;
+    res.set({
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-cache",
+    });
+
+    const onboardArgs = buildOnboardArgs(payload);
+    const interactive = requiresInteractiveOnboarding(payload);
+    stream(
+      interactive
+        ? "Starting OpenAI Codex device pairing. Use the URL and code below, then keep this page open until it completes.\n\n"
+        : "Starting OpenClaw onboarding...\n\n",
+    );
+
+    const onboardRunner = interactive ? runPtyCmd : runCmd;
+    const onboard = await onboardRunner(OPENCLAW_NODE, clawArgs(onboardArgs), {
+      onOutput: stream,
+      cleanOutput: interactive,
+      stripOutput: !interactive,
+      autoInputs: interactive ? [{ pattern: /Enable hooks\?/, input: " \r" }] : [],
+    });
 
     const ok = onboard.code === 0 && isConfigured();
+    stream(`\n[setup] Onboarding exit=${onboard.code} configured=${isConfigured()}\n`);
 
     if (ok) {
-      extra += "\n[setup] Configuring gateway settings...\n";
+      stream("\n[setup] Configuring gateway settings...\n");
 
       const allowInsecureResult = await runCmd(
         OPENCLAW_NODE,
@@ -639,7 +842,9 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
           "true",
         ]),
       );
-      extra += `[config] gateway.controlUi.allowInsecureAuth=true exit=${allowInsecureResult.code}\n`;
+      stream(
+        `[config] gateway.controlUi.allowInsecureAuth=true exit=${allowInsecureResult.code}\n`,
+      );
 
       const tokenResult = await runCmd(
         OPENCLAW_NODE,
@@ -650,7 +855,7 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
           OPENCLAW_GATEWAY_TOKEN,
         ]),
       );
-      extra += `[config] gateway.auth.token exit=${tokenResult.code}\n`;
+      stream(`[config] gateway.auth.token exit=${tokenResult.code}\n`);
 
       const proxiesResult = await runCmd(
         OPENCLAW_NODE,
@@ -662,15 +867,16 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
           '["127.0.0.1"]',
         ]),
       );
-      extra += `[config] gateway.trustedProxies exit=${proxiesResult.code}\n`;
+      stream(`[config] gateway.trustedProxies exit=${proxiesResult.code}\n`);
 
       if (payload.model?.trim()) {
-        extra += `[setup] Setting model to ${payload.model.trim()}...\n`;
+        stream(`[setup] Setting model to ${payload.model.trim()}...\n`);
         const modelResult = await runCmd(
           OPENCLAW_NODE,
           clawArgs(["models", "set", payload.model.trim()]),
+          { onOutput: stream, stripOutput: true },
         );
-        extra += `[models set] exit=${modelResult.code}\n${modelResult.output || ""}`;
+        stream(`[models set] exit=${modelResult.code}\n`);
       }
 
       async function configureChannel(name, cfgObj) {
@@ -688,53 +894,53 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
           OPENCLAW_NODE,
           clawArgs(["config", "get", `channels.${name}`]),
         );
-        return (
+        stream(
           `\n[${name} config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}` +
-          `\n[${name} verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`
+            `\n[${name} verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}\n`,
         );
       }
 
       if (payload.telegramToken?.trim()) {
-        extra += await configureChannel("telegram", {
+        await configureChannel("telegram", {
           enabled: true,
           dmPolicy: "pairing",
           botToken: payload.telegramToken.trim(),
-          groupPolicy: "allowlist",
-          streaming: "partial",
+          groupPolicy: "open",
+          streaming: { mode: "partial" },
         });
       }
 
       if (payload.discordToken?.trim()) {
-        extra += await configureChannel("discord", {
+        await configureChannel("discord", {
           enabled: true,
           token: payload.discordToken.trim(),
-          groupPolicy: "allowlist",
+          groupPolicy: "open",
           dm: { policy: "pairing" },
         });
       }
 
       if (payload.slackBotToken?.trim() || payload.slackAppToken?.trim()) {
-        extra += await configureChannel("slack", {
+        await configureChannel("slack", {
           enabled: true,
           botToken: payload.slackBotToken?.trim() || undefined,
           appToken: payload.slackAppToken?.trim() || undefined,
         });
       }
 
-      extra += "\n[setup] Starting gateway...\n";
+      stream("\n[setup] Starting gateway...\n");
       await restartGateway();
-      extra += "[setup] Gateway started.\n";
+      stream("[setup] Gateway started.\n");
     }
 
-    return res.status(ok ? 200 : 500).json({
-      ok,
-      output: `${onboard.output}${extra}`,
-    });
+    stream(ok ? "\n[setup] Complete.\n" : "\n[setup] Failed. Review the output above.\n");
+    return res.end();
   } catch (err) {
     console.error("[/setup/api/run] error:", err);
-    return res
-      .status(500)
-      .json({ ok: false, output: `Internal error: ${String(err)}` });
+    if (!res.headersSent) {
+      return res.status(500).type("text/plain").send(`Internal error: ${String(err)}\n`);
+    }
+    stream(`\n[setup] Internal error: ${String(err)}\n`);
+    return res.end();
   }
 });
 
@@ -803,37 +1009,83 @@ app.post("/setup/api/doctor", requireSetupAuth, async (_req, res) => {
 });
 
 app.get("/setup/api/devices", requireSetupAuth, async (_req, res) => {
-  const args = ["devices", "list", "--json", "--token", OPENCLAW_GATEWAY_TOKEN];
-  const result = await runCmd(OPENCLAW_NODE, clawArgs(args));
-  console.log(`[devices] list exit=${result.code} output=${result.output}`);
   try {
-    const jsonMatch = result.output.match(/(\{[\s\S]*\}|\[[\s\S]*\])\s*$/);
-    if (!jsonMatch) {
-      console.warn("[devices] no JSON found in output");
-      return res.json({ ok: result.code === 0, raw: result.output });
-    }
-    const data = JSON.parse(jsonMatch[1]);
-    console.log(`[devices] parsed keys=${Object.keys(data)} pending=${JSON.stringify(data.pending)} paired=${JSON.stringify(data.paired)}`);
-    return res.json({ ok: true, data, raw: result.output });
-  } catch (parseErr) {
-    console.warn(`[devices] JSON parse failed: ${parseErr.message}`);
-    return res.json({ ok: result.code === 0, raw: result.output });
+    const { listDevicePairing } = await loadDeviceBootstrapSdk();
+    const data = await listDevicePairing();
+    console.log(
+      `[devices] local list pending=${data?.pending?.length ?? 0} paired=${data?.paired?.length ?? 0}`,
+    );
+    return res.json({ ok: true, data });
+  } catch (err) {
+    const message = err?.message || String(err);
+    console.warn(`[devices] local list failed: ${message}`);
+    return res.status(500).json({ ok: false, error: message });
   }
 });
 
 app.post("/setup/api/devices/approve", requireSetupAuth, async (req, res) => {
-  const { requestId } = req.body || {};
-  const args = ["devices", "approve"];
-  if (requestId) {
-    args.push(String(requestId));
-  } else {
-    args.push("--latest");
+  const requestId = String(req.body?.requestId || "").trim();
+
+  try {
+    const { approveDevicePairing, listDevicePairing } =
+      await loadDeviceBootstrapSdk();
+    const pairings = await listDevicePairing();
+    const pending = Array.isArray(pairings?.pending) ? pairings.pending : [];
+
+    let targetRequestId = requestId;
+    if (targetRequestId) {
+      const exists = pending.some(
+        (request) => request?.requestId === targetRequestId,
+      );
+      if (!exists) {
+        return res.status(404).json({
+          ok: false,
+          error: `Unknown pending device pairing request: ${targetRequestId}`,
+        });
+      }
+    } else {
+      const latest = newestPendingDevicePairing(pending);
+      targetRequestId = latest?.requestId || "";
+      if (!targetRequestId) {
+        return res.status(404).json({
+          ok: false,
+          error: "No pending device pairing requests.",
+        });
+      }
+    }
+
+    // /setup is guarded by SETUP_PASSWORD and runs in the same state volume
+    // as the gateway, so it acts as the trusted bootstrap admin surface.
+    const result = await approveDevicePairing(targetRequestId, {
+      callerScopes: ["operator.admin"],
+    });
+
+    if (!result) {
+      return res.status(404).json({
+        ok: false,
+        error: `Unknown pending device pairing request: ${targetRequestId}`,
+      });
+    }
+
+    if (result.status === "forbidden") {
+      return res.status(403).json({
+        ok: false,
+        error: describeDeviceApprovalForbidden(result),
+        reason: result.reason,
+      });
+    }
+
+    return res.json({
+      ok: true,
+      requestId: targetRequestId,
+      device: result.device,
+      output: `Approved device pairing request ${targetRequestId}.`,
+    });
+  } catch (err) {
+    const message = err?.message || String(err);
+    console.error(`[devices] local approve failed: ${message}`);
+    return res.status(500).json({ ok: false, error: message });
   }
-  args.push("--token", OPENCLAW_GATEWAY_TOKEN);
-  const result = await runCmd(OPENCLAW_NODE, clawArgs(args));
-  return res
-    .status(result.code === 0 ? 200 : 500)
-    .json({ ok: result.code === 0, output: result.output });
 });
 
 app.post("/setup/api/devices/reject", requireSetupAuth, async (req, res) => {
