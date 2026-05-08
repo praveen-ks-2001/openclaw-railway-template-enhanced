@@ -1,0 +1,199 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>🦞 OpenClaw — Logs</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style type="text/tailwindcss">
+    @theme {
+      --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+      --color-surface: #0d1117;
+      --color-surface-raised: #161b22;
+      --color-surface-overlay: #1c2129;
+      --color-border: #30363d;
+      --color-border-muted: #21262d;
+      --color-accent: #e63946;
+      --color-accent-hover: #d62836;
+      --color-text-primary: #e6edf3;
+      --color-text-secondary: #8b949e;
+      --color-text-muted: #6e7681;
+      --color-success: #3fb950;
+      --color-warning: #d29922;
+      --color-danger: #f85149;
+    }
+    [x-cloak] { display: none !important; }
+    body { background: var(--color-surface); }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 4px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; border: 1px solid var(--color-border); background: var(--color-surface-overlay); color: var(--color-text-primary); }
+    .btn:hover:not(:disabled) { background: var(--color-border-muted); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-danger { color: var(--color-danger); border-color: var(--color-danger); background: transparent; }
+    .btn-danger:hover:not(:disabled) { background: var(--color-danger); color: #fff; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; font-size: 11px; font-weight: 500; border: 1px solid var(--color-border-muted); background: var(--color-surface-overlay); color: var(--color-text-secondary); }
+    .dot { width: 7px; height: 7px; border-radius: 9999px; }
+    .log-line { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace; font-size: 12px; line-height: 1.55; padding: 2px 0; white-space: pre-wrap; word-break: break-word; }
+    .log-ts { color: var(--color-text-muted); }
+    .log-src { color: var(--color-text-secondary); }
+    .level-info { color: var(--color-text-primary); }
+    .level-warn { color: var(--color-warning); }
+    .level-error { color: var(--color-danger); }
+    .toggle-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 9999px; font-size: 12px; font-weight: 500; cursor: pointer; user-select: none; border: 1px solid var(--color-border); background: var(--color-surface-overlay); color: var(--color-text-secondary); }
+    .toggle-pill[data-on="true"] { color: var(--color-accent); border-color: var(--color-accent); }
+  </style>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('logsApp', () => ({
+        entries: [],
+        connection: 'connecting',
+        autoScroll: true,
+        levelFilter: 'all',
+        eventSource: null,
+
+        init() {
+          this.openStream();
+          this.$watch('autoScroll', (val) => { if (val) this.scrollToBottom(); });
+        },
+
+        openStream() {
+          this.connection = 'connecting';
+          if (this.eventSource) this.eventSource.close();
+          const es = new EventSource('/setup/api/logs/stream', { withCredentials: true });
+          this.eventSource = es;
+          es.onopen = () => { this.connection = 'live'; };
+          es.onmessage = (ev) => {
+            try {
+              const entry = JSON.parse(ev.data);
+              this.entries.push(entry);
+              if (this.entries.length > 5000) this.entries.splice(0, this.entries.length - 5000);
+              if (this.autoScroll) this.$nextTick(() => this.scrollToBottom());
+            } catch {}
+          };
+          es.onerror = () => { this.connection = 'reconnecting'; };
+        },
+
+        scrollToBottom() {
+          const el = this.$refs.viewer;
+          if (el) el.scrollTop = el.scrollHeight;
+        },
+
+        clearView() {
+          this.entries = [];
+        },
+
+        downloadLog() {
+          const blob = new Blob(
+            [this.entries.map(e => `${e.ts} [${e.level.toUpperCase()}] [${e.source}] ${e.message}`).join('\n')],
+            { type: 'text/plain' },
+          );
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `openclaw-wrapper-log-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.log`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        },
+
+        get visibleEntries() {
+          if (this.levelFilter === 'all') return this.entries;
+          return this.entries.filter((e) => e.level === this.levelFilter);
+        },
+      }));
+    });
+  </script>
+</head>
+
+<body class="text-[var(--color-text-primary)] min-h-screen font-sans flex flex-col" x-data="logsApp()" x-cloak>
+
+  <header
+    class="sticky top-0 z-30 bg-[var(--color-surface)]/90 backdrop-blur-md border-b border-[var(--color-border-muted)]">
+    <div class="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3 min-w-0">
+        <img src="https://res.cloudinary.com/asset-cloudinary/image/upload/v1769907898/openclaw-logo-text_w3qcgl.avif"
+          alt="OpenClaw" class="h-7 shrink-0">
+        <span class="text-xs text-[var(--color-text-muted)]">Wrapper Logs</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="pill" :class="{
+            '!text-[var(--color-success)] !border-[var(--color-success)]/30': connection === 'live',
+            '!text-[var(--color-warning)] !border-[var(--color-warning)]/30': connection === 'connecting',
+            '!text-[var(--color-danger)] !border-[var(--color-danger)]/30': connection === 'reconnecting',
+          }">
+          <span class="dot"
+            :class="{
+              'bg-[var(--color-success)]': connection === 'live',
+              'bg-[var(--color-warning)]': connection === 'connecting',
+              'bg-[var(--color-danger)]': connection === 'reconnecting',
+            }"></span>
+          <span x-text="connection === 'live' ? 'Live' : connection === 'connecting' ? 'Connecting…' : 'Reconnecting…'"></span>
+        </span>
+        <a href="/setup" class="btn">Back to Setup</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-6xl w-full mx-auto px-6 py-6 flex flex-col gap-4 min-h-0">
+
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="text-xs text-[var(--color-text-muted)] mr-1">Level</span>
+        <template x-for="level in ['all', 'info', 'warn', 'error']" :key="level">
+          <button class="toggle-pill" :data-on="levelFilter === level" @click="levelFilter = level">
+            <span x-text="level"></span>
+          </button>
+        </template>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="toggle-pill" :data-on="autoScroll" @click="autoScroll = !autoScroll">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          </svg>
+          Auto-scroll
+        </button>
+        <button class="btn" @click="downloadLog()" :disabled="!entries.length">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Download
+        </button>
+        <button class="btn btn-danger" @click="clearView()" :disabled="!entries.length">Clear</button>
+      </div>
+    </div>
+
+    <div x-ref="viewer"
+      class="flex-1 min-h-[300px] bg-[var(--color-surface-raised)] border border-[var(--color-border-muted)] rounded-xl px-5 py-4 overflow-y-auto">
+      <template x-if="!visibleEntries.length">
+        <p class="text-sm text-[var(--color-text-muted)]">
+          <span x-show="entries.length === 0">Waiting for log entries…</span>
+          <span x-show="entries.length > 0">No entries match the current filter.</span>
+        </p>
+      </template>
+      <template x-for="entry in visibleEntries" :key="entry.ts + entry.message">
+        <div class="log-line">
+          <span class="log-ts" x-text="entry.ts"></span>
+          <span :class="'level-' + entry.level" x-text="' [' + entry.level.toUpperCase() + ']'"></span>
+          <span class="log-src" x-text="' [' + entry.source + ']'"></span>
+          <span :class="'level-' + entry.level" x-text="' ' + entry.message"></span>
+        </div>
+      </template>
+    </div>
+
+    <p class="text-[11px] text-[var(--color-text-muted)] text-right">
+      Showing <span x-text="visibleEntries.length"></span> of <span x-text="entries.length"></span> entries — capped at
+      5000 in browser
+    </p>
+  </main>
+
+</body>
+
+</html>

@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="refresh" content="3">
   <title>🦞 OpenClaw — Starting Up</title>
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,16 +21,108 @@
   </style>
 </head>
 <body class="bg-neutral-100 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 min-h-screen font-sans flex items-center justify-center">
-  <div class="text-center px-6">
+  <div class="text-center px-6 max-w-md">
     <div class="flex justify-center mb-6">
       <picture>
         <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/openclaw/openclaw/main/docs/assets/openclaw-logo-text-dark.png">
         <img src="https://raw.githubusercontent.com/openclaw/openclaw/main/docs/assets/openclaw-logo-text.png" alt="OpenClaw" class="max-w-[200px] h-auto">
       </picture>
     </div>
-    <div class="w-10 h-10 border-2 border-transparent border-t-red-500 rounded-full animate-spin-slow mx-auto mb-8"></div>
-    <h1 class="text-xl font-semibold tracking-tight mb-3">OpenClaw is starting up</h1>
-    <p class="text-neutral-500 text-sm">This page will auto-refresh when the gateway is ready.</p>
+    <div id="spinner" class="w-10 h-10 border-2 border-transparent border-t-red-500 rounded-full animate-spin-slow mx-auto mb-8"></div>
+    <h1 id="heading" class="text-xl font-semibold tracking-tight mb-3">OpenClaw is starting up</h1>
+    <p id="subtext" class="text-neutral-500 text-sm mb-6">Checking gateway status…</p>
+    <div id="actions" class="hidden flex-col gap-2">
+      <a id="primary-link" href="#" class="inline-block px-5 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium transition-colors">Continue</a>
+      <a id="secondary-link" href="/setup" class="inline-block text-xs text-neutral-500 hover:text-neutral-300">Open Setup wizard instead</a>
+    </div>
   </div>
+
+  <script>
+    (function () {
+      const heading = document.getElementById('heading');
+      const subtext = document.getElementById('subtext');
+      const spinner = document.getElementById('spinner');
+      const actions = document.getElementById('actions');
+      const primaryLink = document.getElementById('primary-link');
+      const secondaryLink = document.getElementById('secondary-link');
+
+      let countdown = 0;
+      let countdownTimer = null;
+      let pollTimer = null;
+
+      function showReadyCountdown() {
+        if (countdownTimer) return;
+        countdown = 8;
+        spinner.classList.add('!border-t-emerald-500');
+        heading.textContent = 'Gateway is ready';
+        primaryLink.href = '/openclaw';
+        primaryLink.textContent = 'Open OpenClaw UI';
+        secondaryLink.classList.remove('hidden');
+        actions.classList.remove('hidden');
+        actions.classList.add('flex');
+        const tick = () => {
+          subtext.textContent = `Redirecting in ${countdown}s…`;
+          if (countdown <= 0) {
+            window.location.replace('/openclaw');
+            return;
+          }
+          countdown -= 1;
+          countdownTimer = setTimeout(tick, 1000);
+        };
+        tick();
+      }
+
+      function showUnconfigured() {
+        if (pollTimer) clearTimeout(pollTimer);
+        spinner.classList.add('!border-t-amber-500');
+        heading.textContent = 'OpenClaw is not configured yet';
+        subtext.textContent = 'Open the Setup wizard to finish onboarding.';
+        primaryLink.href = '/setup';
+        primaryLink.textContent = 'Open Setup wizard';
+        secondaryLink.classList.add('hidden');
+        actions.classList.remove('hidden');
+        actions.classList.add('flex');
+        // Auto-redirect after a short pause so users aren't stuck on this page.
+        setTimeout(() => window.location.replace('/setup'), 1500);
+      }
+
+      function showStarting() {
+        heading.textContent = 'OpenClaw is starting up';
+        subtext.textContent = 'Waiting for the gateway to come online…';
+      }
+
+      function showError(reason) {
+        spinner.classList.add('!border-t-amber-500');
+        heading.textContent = 'Could not reach the wrapper';
+        subtext.textContent = reason;
+      }
+
+      async function poll() {
+        try {
+          const res = await fetch('/healthz', { credentials: 'same-origin' });
+          if (!res.ok) {
+            showError('Health endpoint returned HTTP ' + res.status + '.');
+          } else {
+            const json = await res.json();
+            const state = json && json.gateway;
+            if (state === 'ready') {
+              showReadyCountdown();
+              return;
+            } else if (state === 'unconfigured') {
+              showUnconfigured();
+              return;
+            } else {
+              showStarting();
+            }
+          }
+        } catch (err) {
+          showError('Network error: ' + (err && err.message ? err.message : String(err)));
+        }
+        pollTimer = setTimeout(poll, 2000);
+      }
+
+      poll();
+    })();
+  </script>
 </body>
 </html>
