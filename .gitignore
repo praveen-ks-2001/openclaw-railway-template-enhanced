@@ -5,8 +5,10 @@ npm-debug.log*
 # Local env
 .env
 src_ref
-src_ref2
+CLAUDE.md
 oc_main
+todos.md
+bkp_5_9/
 
 # Build artifacts
 /dist

@@ -10,12 +10,13 @@ RUN apt-get update \
     python3 \
     build-essential \
     zip \
+    unzip \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml ./
-RUN corepack enable && pnpm install --frozen-lockfile --prod
+RUN corepack enable && corepack prepare pnpm@10.12.4 --activate && pnpm install --frozen-lockfile --prod
 
 COPY src ./src
 COPY entrypoint.sh ./entrypoint.sh

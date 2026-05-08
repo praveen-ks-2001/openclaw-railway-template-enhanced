@@ -90,6 +90,71 @@ function clawArgs(args) {
   return [OPENCLAW_ENTRY, ...args];
 }
 
+const LOG_RING_LIMIT = 500;
+const LOG_FILE_MAX_BYTES = 5 * 1024 * 1024;
+const logRing = [];
+const logSubscribers = new Set();
+const wrapperLogPath = path.join(STATE_DIR, "wrapper.log");
+
+function trimWrapperLogIfLarge() {
+  try {
+    const stat = fs.statSync(wrapperLogPath);
+    if (stat.size <= LOG_FILE_MAX_BYTES) return;
+    const fd = fs.openSync(wrapperLogPath, "r");
+    const keepBytes = Math.floor(LOG_FILE_MAX_BYTES / 2);
+    const buf = Buffer.alloc(keepBytes);
+    fs.readSync(fd, buf, 0, keepBytes, stat.size - keepBytes);
+    fs.closeSync(fd);
+    fs.writeFileSync(wrapperLogPath, buf);
+  } catch {
+    // best-effort; don't disrupt normal operation
+  }
+}
+
+function appendLog(level, source, message) {
+  const entry = {
+    ts: new Date().toISOString(),
+    level,
+    source,
+    message: String(message),
+  };
+  logRing.push(entry);
+  while (logRing.length > LOG_RING_LIMIT) logRing.shift();
+
+  const line = `${entry.ts} [${level.toUpperCase()}] [${source}] ${entry.message}\n`;
+  const consoleFn =
+    level === "error" ? console.error : level === "warn" ? console.warn : console.log;
+  consoleFn(line.trimEnd());
+
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.appendFileSync(wrapperLogPath, line);
+    trimWrapperLogIfLarge();
+  } catch {
+    // best-effort file write
+  }
+
+  for (const subscriber of logSubscribers) {
+    try {
+      subscriber.write(`data: ${JSON.stringify(entry)}\n\n`);
+    } catch {
+      logSubscribers.delete(subscriber);
+    }
+  }
+}
+
+const serverLog = {
+  info: (source, message) => appendLog("info", source, message),
+  warn: (source, message) => appendLog("warn", source, message),
+  error: (source, message) => appendLog("error", source, message),
+  recent: (limit = LOG_RING_LIMIT) =>
+    logRing.slice(Math.max(0, logRing.length - limit)),
+  subscribe: (res) => {
+    logSubscribers.add(res);
+    return () => logSubscribers.delete(res);
+  },
+};
+
 function stripAnsi(value) {
   return String(value)
     .replace(/\x1b\]8;;.*?\x1b\\|\x1b\]8;;\x1b\\/g, "")
@@ -108,6 +173,10 @@ function cleanPtyOutput(value) {
     .filter((line) => line && !isTransientProgressLine(line))
     .join("\n");
   return cleaned ? `${cleaned}\n` : "";
+}
+
+function requiresInteractiveOnboarding(payload) {
+  return payload.authChoice === "openai-codex-device-code";
 }
 
 let deviceBootstrapSdkPromise = null;
@@ -157,10 +226,8 @@ function newestPendingDevicePairing(pending) {
 function describeDeviceApprovalForbidden(result) {
   const scope = result?.scope || "unknown";
   const role = result?.role || "unknown";
-
   switch (result?.reason) {
     case "caller-scopes-required":
-      return `missing scope: ${scope}`;
     case "caller-missing-scope":
       return `missing scope: ${scope}`;
     case "scope-outside-requested-roles":
@@ -171,6 +238,219 @@ function describeDeviceApprovalForbidden(result) {
       return `bootstrap profile does not allow scope: ${scope}`;
     default:
       return "Device approval is forbidden by bootstrap policy.";
+  }
+}
+
+// Stage and rollback dirs MUST live outside STATE_DIR / WORKSPACE_DIR.
+// Otherwise the apply step tries to rename STATE_DIR into its own subdirectory (EINVAL).
+const WRAPPER_VOLUME_ROOT = path.dirname(STATE_DIR);
+const IMPORT_STAGING_ROOT = path.join(WRAPPER_VOLUME_ROOT, ".wrapper-import-staging");
+const IMPORT_ROLLBACK_DIR = path.join(WRAPPER_VOLUME_ROOT, ".wrapper-import-rollback");
+const IMPORT_STAGE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+function importStagingPath(stagingId) {
+  // stagingId is a hex string we generate; never trust caller-supplied values into a path otherwise
+  if (!/^[a-f0-9]{16,64}$/.test(String(stagingId || ""))) return null;
+  return path.join(IMPORT_STAGING_ROOT, stagingId);
+}
+
+function cleanupStaleImportStages() {
+  // Best-effort: remove leftover staging dirs from older builds that put them inside STATE_DIR
+  // (those caused EINVAL on rename and never got cleaned up).
+  for (const legacyName of [".import-staging", ".import-rollback"]) {
+    try {
+      const legacyPath = path.join(STATE_DIR, legacyName);
+      if (fs.existsSync(legacyPath)) {
+        fs.rmSync(legacyPath, { recursive: true, force: true });
+      }
+    } catch { /* ignore */ }
+  }
+  try {
+    if (!fs.existsSync(IMPORT_STAGING_ROOT)) return;
+    const now = Date.now();
+    for (const entry of fs.readdirSync(IMPORT_STAGING_ROOT)) {
+      const full = path.join(IMPORT_STAGING_ROOT, entry);
+      try {
+        const stat = fs.statSync(full);
+        if (now - stat.mtimeMs > IMPORT_STAGE_TTL_MS) {
+          fs.rmSync(full, { recursive: true, force: true });
+        }
+      } catch { /* ignore individual entry errors */ }
+    }
+  } catch { /* best-effort */ }
+}
+
+function detectZipPasswordError(stderr, code) {
+  const text = String(stderr || "").toLowerCase();
+  if (
+    text.includes("incorrect password") ||
+    text.includes("password incorrect") ||
+    text.includes("password required") ||
+    text.includes("encrypted") ||
+    text.includes("password needed") ||
+    text.includes("skipped (incorrect password)")
+  ) {
+    return true;
+  }
+  // unzip(1) historically returns 82 for a password error on extract.
+  return code === 82;
+}
+
+async function probeZipNeedsPassword(zipFile, password) {
+  // -t = test only (no extraction). -P "<pwd>" provides password without prompt.
+  // Trying with the supplied password (or empty string when not provided).
+  const result = await runCmd("unzip", ["-t", "-P", password ?? "", zipFile]);
+  if (result.code === 0) return { ok: true };
+  if (detectZipPasswordError(result.output, result.code)) {
+    return { ok: false, needsPassword: true, output: result.output };
+  }
+  return { ok: false, needsPassword: false, output: result.output };
+}
+
+async function extractZipTo(zipFile, password, destDir) {
+  fs.mkdirSync(destDir, { recursive: true });
+  const result = await runCmd("unzip", [
+    "-qq",
+    "-o",
+    "-P",
+    password ?? "",
+    zipFile,
+    "-d",
+    destDir,
+  ]);
+  if (result.code !== 0) {
+    return { ok: false, output: result.output };
+  }
+  return { ok: true };
+}
+
+function findStagedDataRoot(stageDir) {
+  // We expect the export's layout to be `data/.openclaw/...` and `data/workspace/...`.
+  // Some `zip` invocations might preserve a leading slash → starts with an empty dir; check both.
+  const candidates = [
+    path.join(stageDir, "data"),
+    stageDir, // fallback if user re-zipped with no leading "data/"
+  ];
+  for (const candidate of candidates) {
+    const stateCheck = path.join(candidate, ".openclaw", "openclaw.json");
+    if (fs.existsSync(stateCheck)) {
+      return {
+        ok: true,
+        dataRoot: candidate,
+        stateDir: path.join(candidate, ".openclaw"),
+        workspaceDir: path.join(candidate, "workspace"),
+      };
+    }
+  }
+  return { ok: false };
+}
+
+function summarizeStagedImport(stateDirPath, workspaceDirPath) {
+  const summary = {
+    hasOpenclawJson: false,
+    hasWorkspace: false,
+    sessionCount: 0,
+    sourceVersion: null,
+    importedSize: 0,
+  };
+  const cfgPath = path.join(stateDirPath, "openclaw.json");
+  if (fs.existsSync(cfgPath)) {
+    summary.hasOpenclawJson = true;
+    try {
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
+      summary.sourceVersion = cfg?.meta?.version ?? cfg?.version ?? null;
+    } catch { /* invalid JSON is reported elsewhere */ }
+  }
+  if (fs.existsSync(workspaceDirPath)) {
+    summary.hasWorkspace = true;
+  }
+  const sessionsDir = path.join(stateDirPath, "agents", "main", "sessions");
+  if (fs.existsSync(sessionsDir)) {
+    try {
+      summary.sessionCount = fs
+        .readdirSync(sessionsDir)
+        .filter((n) => n.endsWith(".jsonl") && !n.includes(".bak.")).length;
+    } catch { /* ignore */ }
+  }
+  return summary;
+}
+
+function applyDeploymentFixesToStaged(stagedStateDir) {
+  // Files we never want to inherit from the source deployment:
+  const dropPaths = [
+    "gateway.token",          // wrapper-managed, must be the destination's token
+    "identity",               // CLI keypair tied to source's pairing scope
+    "devices",                // paired browsers from another deployment
+    "tui",                    // stale TUI session state
+    "tasks",                  // stale runtime task state
+    "wrapper.log",            // logs from the source wrapper
+    ".import-staging",        // legacy: old wrapper builds put staging inside STATE_DIR
+    ".import-rollback",       // legacy: same as above
+    ".wrapper-import-staging",
+    ".wrapper-import-rollback",
+  ];
+  for (const rel of dropPaths) {
+    const full = path.join(stagedStateDir, rel);
+    try {
+      fs.rmSync(full, { recursive: true, force: true });
+    } catch { /* best-effort */ }
+  }
+
+  // Patch openclaw.json so gateway settings match THIS deployment.
+  const cfgPath = path.join(stagedStateDir, "openclaw.json");
+  if (!fs.existsSync(cfgPath)) {
+    throw new Error("Staged openclaw.json missing — cannot apply deployment fixes.");
+  }
+  let cfg;
+  try {
+    cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
+  } catch (err) {
+    throw new Error(`Staged openclaw.json is not valid JSON: ${err.message}`);
+  }
+  cfg.gateway = cfg.gateway || {};
+  cfg.gateway.auth = cfg.gateway.auth || {};
+  cfg.gateway.auth.mode = "token";
+  cfg.gateway.auth.token = OPENCLAW_GATEWAY_TOKEN;
+  cfg.gateway.bind = "loopback";
+  cfg.gateway.port = INTERNAL_GATEWAY_PORT;
+  cfg.gateway.trustedProxies = ["127.0.0.1"];
+  cfg.gateway.controlUi = cfg.gateway.controlUi || {};
+  cfg.gateway.controlUi.allowInsecureAuth = true;
+  // Rewrite allowedOrigins to THIS deployment's public URL so the imported
+  // config points at the right host. Falls back to deletion if RAILWAY_PUBLIC_DOMAIN
+  // is missing (in which case syncAllowedOrigins runs at gateway start as a fallback).
+  const publicDomain = (process.env.RAILWAY_PUBLIC_DOMAIN || "").trim();
+  if (publicDomain) {
+    cfg.gateway.controlUi.allowedOrigins = [`https://${publicDomain}`];
+    serverLog.info(
+      "import",
+      `set allowedOrigins to [https://${publicDomain}] for imported config`,
+    );
+  } else {
+    delete cfg.gateway.controlUi.allowedOrigins;
+    serverLog.warn(
+      "import",
+      "RAILWAY_PUBLIC_DOMAIN not set — allowedOrigins removed; gateway may reject browser connects",
+    );
+  }
+  fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
+}
+
+function copyDirInto(srcDir, dstDir) {
+  fs.mkdirSync(dstDir, { recursive: true });
+  if (typeof fs.cpSync === "function") {
+    fs.cpSync(srcDir, dstDir, { recursive: true, force: true, dereference: false });
+  } else {
+    // Fallback for older Node — should not be hit on Node 22.
+    for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+      const src = path.join(srcDir, entry.name);
+      const dst = path.join(dstDir, entry.name);
+      if (entry.isDirectory()) {
+        copyDirInto(src, dst);
+      } else {
+        fs.copyFileSync(src, dst);
+      }
+    }
   }
 }
 
@@ -190,8 +470,14 @@ function isConfigured() {
 }
 
 async function syncAllowedOrigins() {
-  const publicDomain = process.env.RAILWAY_PUBLIC_DOMAIN;
-  if (!publicDomain) return;
+  const publicDomain = (process.env.RAILWAY_PUBLIC_DOMAIN || "").trim();
+  if (!publicDomain) {
+    serverLog.warn(
+      "gateway",
+      "syncAllowedOrigins: RAILWAY_PUBLIC_DOMAIN not set — skipping (gateway will reject remote browser origins)",
+    );
+    return;
+  }
 
   const origin = `https://${publicDomain}`;
   const result = await runCmd(
@@ -205,15 +491,30 @@ async function syncAllowedOrigins() {
     ]),
   );
   if (result.code === 0) {
-    console.log("gateway", `set allowedOrigins to [${origin}]`);
+    serverLog.info("gateway", `allowedOrigins set to [${origin}]`);
   } else {
-    console.warn("gateway", `failed to set allowedOrigins (exit=${result.code})`);
+    serverLog.warn(
+      "gateway",
+      `failed to set allowedOrigins (exit=${result.code}): ${result.output?.slice(-300) || ""}`,
+    );
   }
 }
 
 let gatewayProc = null;
 let gatewayStarting = null;
 let shuttingDown = false;
+let intentionallyRestarting = false;
+let consecutiveRestartCount = 0;
+let lastGatewayStartedAt = 0;
+
+const RESTART_BASE_DELAY_MS = 2_000;
+const RESTART_MAX_DELAY_MS = 60_000;
+const RESTART_RESET_AFTER_UPTIME_MS = 60_000;
+
+function nextRestartDelay() {
+  const exp = Math.min(consecutiveRestartCount, 5);
+  return Math.min(RESTART_BASE_DELAY_MS * 2 ** exp, RESTART_MAX_DELAY_MS);
+}
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -301,25 +602,69 @@ async function startGateway() {
   console.log(`[gateway] WORKSPACE_DIR: ${WORKSPACE_DIR}`);
   console.log(`[gateway] config path: ${configPath()}`);
 
+  lastGatewayStartedAt = Date.now();
+
   gatewayProc.on("error", (err) => {
-    console.error(`[gateway] spawn error: ${String(err)}`);
+    serverLog.error("gateway", `spawn error: ${String(err)}`);
     gatewayProc = null;
   });
 
   gatewayProc.on("exit", (code, signal) => {
-    console.error(`[gateway] exited code=${code} signal=${signal}`);
+    const uptimeMs = Date.now() - lastGatewayStartedAt;
+    serverLog.warn(
+      "gateway",
+      `exited code=${code} signal=${signal} uptime=${Math.round(uptimeMs / 1000)}s`,
+    );
     gatewayProc = null;
-    if (!shuttingDown && isConfigured()) {
-      console.log("[gateway] scheduling auto-restart in 2s...");
-      setTimeout(() => {
-        if (!shuttingDown && !gatewayProc && isConfigured()) {
-          ensureGatewayRunning().catch((err) => {
-            console.error(`[gateway] auto-restart failed: ${err.message}`);
-          });
-        }
-      }, 2000);
+
+    if (intentionallyRestarting) {
+      intentionallyRestarting = false;
+      consecutiveRestartCount = 0;
+      return;
     }
+
+    if (shuttingDown || !isConfigured()) return;
+
+    if (uptimeMs >= RESTART_RESET_AFTER_UPTIME_MS) {
+      consecutiveRestartCount = 0;
+    }
+    consecutiveRestartCount += 1;
+    const delayMs = nextRestartDelay();
+    serverLog.info(
+      "gateway",
+      `auto-restart attempt ${consecutiveRestartCount} in ${delayMs}ms`,
+    );
+    setTimeout(async () => {
+      if (shuttingDown || gatewayProc || !isConfigured()) return;
+      // OpenClaw may have respawned itself in the meantime — probe first to avoid a redundant restart.
+      const alreadyUp = await probeAnyGatewayEndpoint();
+      if (alreadyUp) {
+        serverLog.info("gateway", "external restart detected, skipping respawn");
+        consecutiveRestartCount = 0;
+        return;
+      }
+      ensureGatewayRunning().catch((err) => {
+        serverLog.error("gateway", `auto-restart failed: ${err.message}`);
+      });
+    }, delayMs);
   });
+}
+
+async function probeAnyGatewayEndpoint() {
+  const endpoints = ["/openclaw", "/", "/health"];
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(`${GATEWAY_TARGET}${endpoint}`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${OPENCLAW_GATEWAY_TOKEN}` },
+        signal: AbortSignal.timeout(2000),
+      });
+      if (res.status < 500) return true;
+    } catch {
+      // try next endpoint
+    }
+  }
+  return false;
 }
 
 async function ensureGatewayRunning() {
@@ -351,14 +696,16 @@ function isGatewayReady() {
 
 async function restartGateway() {
   if (gatewayProc) {
+    intentionallyRestarting = true;
     try {
       gatewayProc.kill("SIGTERM");
     } catch (err) {
-      console.warn(`[gateway] kill error: ${err.message}`);
+      serverLog.warn("gateway", `kill error: ${err.message}`);
     }
     await sleep(750);
     gatewayProc = null;
   }
+  consecutiveRestartCount = 0;
   return ensureGatewayRunning();
 }
 
@@ -463,6 +810,10 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
   res.sendFile(path.join(process.cwd(), "src", "public", "setup.html"));
 });
 
+app.get("/logs", requireSetupAuth, (_req, res) => {
+  res.sendFile(path.join(process.cwd(), "src", "public", "logs.html"));
+});
+
 app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
   const { version, channelsHelp } = await getOpenclawInfo();
 
@@ -470,7 +821,7 @@ app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
     {
       value: "openai",
       label: "OpenAI",
-      hint: "API key / Codex",
+      hint: "API key / ChatGPT",
       options: [
         { value: "openai-api-key", label: "OpenAI API key" },
         {
@@ -491,10 +842,41 @@ app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
     {
       value: "google",
       label: "Google",
-      hint: "API key",
+      hint: "API key / OAuth",
       options: [
         { value: "gemini-api-key", label: "Google Gemini API key" },
+        { value: "google-gemini-cli", label: "Gemini CLI (OAuth)" },
       ],
+    },
+    {
+      value: "deepseek",
+      label: "DeepSeek",
+      hint: "API key",
+      options: [{ value: "deepseek-api-key", label: "DeepSeek API key" }],
+    },
+    {
+      value: "xai",
+      label: "xAI (Grok)",
+      hint: "API key",
+      options: [{ value: "xai-api-key", label: "xAI API key" }],
+    },
+    {
+      value: "mistral",
+      label: "Mistral AI",
+      hint: "API key",
+      options: [{ value: "mistral-api-key", label: "Mistral API key" }],
+    },
+    {
+      value: "together",
+      label: "Together AI",
+      hint: "API key",
+      options: [{ value: "together-api-key", label: "Together AI API key" }],
+    },
+    {
+      value: "huggingface",
+      label: "Hugging Face",
+      hint: "API key",
+      options: [{ value: "huggingface-api-key", label: "Hugging Face API key" }],
     },
     {
       value: "openrouter",
@@ -511,39 +893,106 @@ app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
       ],
     },
     {
+      value: "cloudflare-ai-gateway",
+      label: "Cloudflare AI Gateway",
+      hint: "API key + account/gateway IDs",
+      options: [
+        {
+          value: "cloudflare-ai-gateway-api-key",
+          label: "Cloudflare AI Gateway API key",
+        },
+      ],
+    },
+    {
+      value: "litellm",
+      label: "LiteLLM",
+      hint: "Proxy / multi-model router",
+      options: [{ value: "litellm-api-key", label: "LiteLLM API key" }],
+    },
+    {
       value: "moonshot",
       label: "Moonshot AI",
       hint: "Kimi K2 + Kimi Code",
       options: [
-        { value: "moonshot-api-key", label: "Moonshot AI API key" },
+        { value: "moonshot-api-key", label: "Moonshot AI API key (Global)" },
+        { value: "moonshot-api-key-cn", label: "Moonshot AI API key (CN)" },
         { value: "kimi-code-api-key", label: "Kimi Code API key" },
       ],
     },
     {
       value: "zai",
       label: "Z.AI (GLM 4.7)",
-      hint: "API key",
-      options: [{ value: "zai-api-key", label: "Z.AI (GLM 4.7) API key" }],
+      hint: "API key (multiple plans)",
+      options: [
+        { value: "zai-api-key", label: "Z.AI API key" },
+        { value: "zai-coding-global", label: "Z.AI Coding (Global)" },
+        { value: "zai-coding-cn", label: "Z.AI Coding (CN)" },
+        { value: "zai-global", label: "Z.AI Standard (Global)" },
+        { value: "zai-cn", label: "Z.AI Standard (CN)" },
+      ],
     },
     {
       value: "minimax",
       label: "MiniMax",
-      hint: "M2.7 (recommended)",
+      hint: "M2.7 (recommended) — API key or OAuth",
       options: [
         { value: "minimax-global-api", label: "MiniMax API key (Global)" },
+        { value: "minimax-global-oauth", label: "MiniMax OAuth (Global)" },
         { value: "minimax-cn-api", label: "MiniMax API key (CN)" },
+        { value: "minimax-cn-oauth", label: "MiniMax OAuth (CN)" },
       ],
     },
     {
       value: "qwen",
       label: "Qwen",
-      hint: "Standard / Coding Plan API key",
+      hint: "API key",
       options: [
-        { value: "modelstudio-api-key", label: "Coding Plan (Global)" },
-        { value: "modelstudio-api-key-cn", label: "Coding Plan (CN)" },
-        { value: "modelstudio-standard-api-key", label: "Standard Plan (Global)" },
-        { value: "modelstudio-standard-api-key-cn", label: "Standard Plan (CN)" },
+        { value: "qwen-api-key", label: "Qwen API key (Global)" },
+        { value: "qwen-api-key-cn", label: "Qwen API key (CN)" },
       ],
+    },
+    {
+      value: "alibaba",
+      label: "Alibaba Model Studio",
+      hint: "DashScope / Model Studio",
+      options: [
+        {
+          value: "alibaba-model-studio-api-key",
+          label: "Alibaba Model Studio API key",
+        },
+      ],
+    },
+    {
+      value: "regional-cn",
+      label: "Other Chinese providers",
+      hint: "Xiaomi / Volcengine / BytePlus / Qianfan",
+      options: [
+        { value: "xiaomi-api-key", label: "Xiaomi API key" },
+        { value: "volcengine-api-key", label: "Volcengine API key" },
+        { value: "byteplus-api-key", label: "BytePlus API key" },
+        { value: "qianfan-api-key", label: "Baidu Qianfan API key" },
+      ],
+    },
+    {
+      value: "venice",
+      label: "Venice",
+      hint: "API key",
+      options: [{ value: "venice-api-key", label: "Venice API key" }],
+    },
+    {
+      value: "chutes",
+      label: "Chutes",
+      hint: "Free tier or API key",
+      options: [
+        { value: "chutes", label: "Chutes (free tier OAuth)" },
+        { value: "chutes-api-key", label: "Chutes API key" },
+      ],
+    },
+    {
+      value: "kilocode",
+      label: "Kilocode",
+      hint: "API key",
+      options: [{ value: "kilocode-api-key", label: "Kilocode API key" }],
     },
     {
       value: "copilot",
@@ -564,11 +1013,30 @@ app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
       options: [{ value: "synthetic-api-key", label: "Synthetic API key" }],
     },
     {
-      value: "opencode-zen",
-      label: "OpenCode Zen",
-      hint: "API key",
+      value: "opencode",
+      label: "OpenCode",
+      hint: "Multi-model proxies",
       options: [
-        { value: "opencode-zen", label: "OpenCode Zen (multi-model proxy)" },
+        { value: "opencode-zen", label: "OpenCode Zen" },
+        { value: "opencode-go", label: "OpenCode Go" },
+      ],
+    },
+    {
+      value: "self-hosted",
+      label: "Self-hosted",
+      hint: "Ollama / vLLM / SGLang — no API key needed",
+      options: [
+        { value: "ollama", label: "Ollama" },
+        { value: "vllm", label: "vLLM" },
+        { value: "sglang", label: "SGLang" },
+      ],
+    },
+    {
+      value: "custom",
+      label: "Custom provider",
+      hint: "OpenAI- or Anthropic-compatible endpoint",
+      options: [
+        { value: "custom-api-key", label: "Custom endpoint (base URL + model ID)" },
       ],
     },
   ];
@@ -583,10 +1051,6 @@ app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
     gatewayToken: OPENCLAW_GATEWAY_TOKEN,
   });
 });
-
-function requiresInteractiveOnboarding(payload) {
-  return payload.authChoice === "openai-codex-device-code";
-}
 
 function buildOnboardArgs(payload) {
   const interactive = requiresInteractiveOnboarding(payload);
@@ -629,26 +1093,65 @@ function buildOnboardArgs(payload) {
     const map = {
       "openai-api-key": "--openai-api-key",
       apiKey: "--anthropic-api-key",
+      "gemini-api-key": "--gemini-api-key",
+      "deepseek-api-key": "--deepseek-api-key",
+      "xai-api-key": "--xai-api-key",
+      "mistral-api-key": "--mistral-api-key",
+      "together-api-key": "--together-api-key",
+      "huggingface-api-key": "--huggingface-api-key",
       "openrouter-api-key": "--openrouter-api-key",
       "ai-gateway-api-key": "--ai-gateway-api-key",
+      "cloudflare-ai-gateway-api-key": "--cloudflare-ai-gateway-api-key",
+      "litellm-api-key": "--litellm-api-key",
       "moonshot-api-key": "--moonshot-api-key",
+      "moonshot-api-key-cn": "--moonshot-api-key",
       "kimi-code-api-key": "--kimi-code-api-key",
-      "gemini-api-key": "--gemini-api-key",
       "zai-api-key": "--zai-api-key",
+      "zai-coding-global": "--zai-api-key",
+      "zai-coding-cn": "--zai-api-key",
+      "zai-global": "--zai-api-key",
+      "zai-cn": "--zai-api-key",
       "minimax-global-api": "--minimax-api-key",
       "minimax-cn-api": "--minimax-api-key",
-      "modelstudio-api-key": "--modelstudio-api-key",
-      "modelstudio-api-key-cn": "--modelstudio-api-key-cn",
-      "modelstudio-standard-api-key": "--modelstudio-standard-api-key",
-      "modelstudio-standard-api-key-cn": "--modelstudio-standard-api-key-cn",
+      "qwen-api-key": "--qwen-api-key",
+      "qwen-api-key-cn": "--qwen-api-key",
+      "alibaba-model-studio-api-key": "--alibaba-model-studio-api-key",
+      "xiaomi-api-key": "--xiaomi-api-key",
+      "volcengine-api-key": "--volcengine-api-key",
+      "byteplus-api-key": "--byteplus-api-key",
+      "qianfan-api-key": "--qianfan-api-key",
+      "venice-api-key": "--venice-api-key",
+      "chutes-api-key": "--chutes-api-key",
+      "kilocode-api-key": "--kilocode-api-key",
       "synthetic-api-key": "--synthetic-api-key",
       "opencode-zen": "--opencode-zen-api-key",
+      "opencode-go": "--opencode-go-api-key",
+      "custom-api-key": "--custom-api-key",
     };
     const flag = map[payload.authChoice];
     if (flag && secret) {
       args.push(flag, secret);
     }
 
+    if (payload.authChoice === "custom-api-key") {
+      const baseUrl = (payload.customBaseUrl || "").trim();
+      const modelId = (payload.customModelId || "").trim();
+      const compat = (payload.customCompatibility || "").trim();
+      if (baseUrl) args.push("--custom-base-url", baseUrl);
+      if (modelId) args.push("--custom-model-id", modelId);
+      if (compat) args.push("--custom-compatibility", compat);
+    }
+
+    if (payload.authChoice === "cloudflare-ai-gateway-api-key") {
+      const accountId = (payload.cloudflareAccountId || "").trim();
+      const gatewayId = (payload.cloudflareGatewayId || "").trim();
+      if (accountId) {
+        args.push("--cloudflare-ai-gateway-account-id", accountId);
+      }
+      if (gatewayId) {
+        args.push("--cloudflare-ai-gateway-gateway-id", gatewayId);
+      }
+    }
   }
 
   return args;
@@ -656,7 +1159,7 @@ function buildOnboardArgs(payload) {
 
 function runCmd(cmd, args, opts = {}) {
   return new Promise((resolve) => {
-    const { autoInputs: _autoInputs, onOutput, stripOutput, ...spawnOpts } = opts;
+    const { onOutput, stripOutput, ...spawnOpts } = opts;
     const proc = childProcess.spawn(cmd, args, {
       ...spawnOpts,
       env: {
@@ -744,21 +1247,48 @@ const VALID_AUTH_CHOICES = [
   "openai-codex-device-code",
   "apiKey",
   "gemini-api-key",
+  "google-gemini-cli",
+  "deepseek-api-key",
+  "xai-api-key",
+  "mistral-api-key",
+  "together-api-key",
+  "huggingface-api-key",
   "openrouter-api-key",
   "ai-gateway-api-key",
+  "cloudflare-ai-gateway-api-key",
+  "litellm-api-key",
   "moonshot-api-key",
+  "moonshot-api-key-cn",
   "kimi-code-api-key",
   "zai-api-key",
+  "zai-coding-global",
+  "zai-coding-cn",
+  "zai-global",
+  "zai-cn",
   "minimax-global-api",
+  "minimax-global-oauth",
   "minimax-cn-api",
-  "modelstudio-api-key",
-  "modelstudio-api-key-cn",
-  "modelstudio-standard-api-key",
-  "modelstudio-standard-api-key-cn",
+  "minimax-cn-oauth",
+  "qwen-api-key",
+  "qwen-api-key-cn",
+  "alibaba-model-studio-api-key",
+  "xiaomi-api-key",
+  "volcengine-api-key",
+  "byteplus-api-key",
+  "qianfan-api-key",
+  "venice-api-key",
+  "chutes",
+  "chutes-api-key",
+  "kilocode-api-key",
   "github-copilot",
   "copilot-proxy",
   "synthetic-api-key",
   "opencode-zen",
+  "opencode-go",
+  "ollama",
+  "vllm",
+  "sglang",
+  "custom-api-key",
 ];
 
 function validatePayload(payload) {
@@ -775,6 +1305,11 @@ function validatePayload(payload) {
     "slackAppToken",
     "authSecret",
     "model",
+    "customBaseUrl",
+    "customModelId",
+    "customCompatibility",
+    "cloudflareAccountId",
+    "cloudflareGatewayId",
   ];
   for (const field of stringFields) {
     if (payload[field] !== undefined && typeof payload[field] !== "string") {
@@ -794,7 +1329,9 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
       await ensureGatewayRunning();
       return res
         .type("text/plain")
-        .send("Already configured.\nUse Reset setup if you want to rerun onboarding.\n");
+        .send(
+          "Already configured.\nUse Reset setup if you want to rerun onboarding.\n",
+        );
     }
 
     fs.mkdirSync(STATE_DIR, { recursive: true });
@@ -824,11 +1361,16 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
       onOutput: stream,
       cleanOutput: interactive,
       stripOutput: !interactive,
-      autoInputs: interactive ? [{ pattern: /Enable hooks\?/, input: " \r" }] : [],
+      autoInputs: interactive
+        ? [{ pattern: /Enable hooks\?/, input: " \r" }]
+        : [],
     });
 
+    stream(
+      `\n[setup] Onboarding exit=${onboard.code} configured=${isConfigured()}\n`,
+    );
+
     const ok = onboard.code === 0 && isConfigured();
-    stream(`\n[setup] Onboarding exit=${onboard.code} configured=${isConfigured()}\n`);
 
     if (ok) {
       stream("\n[setup] Configuring gateway settings...\n");
@@ -903,9 +1445,7 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
       if (payload.telegramToken?.trim()) {
         await configureChannel("telegram", {
           enabled: true,
-          dmPolicy: "pairing",
           botToken: payload.telegramToken.trim(),
-          groupPolicy: "open",
           streaming: { mode: "partial" },
         });
       }
@@ -914,7 +1454,7 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
         await configureChannel("discord", {
           enabled: true,
           token: payload.discordToken.trim(),
-          groupPolicy: "open",
+          groupPolicy: "allowlist",
           dm: { policy: "pairing" },
         });
       }
@@ -932,12 +1472,19 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
       stream("[setup] Gateway started.\n");
     }
 
-    stream(ok ? "\n[setup] Complete.\n" : "\n[setup] Failed. Review the output above.\n");
+    stream(
+      ok
+        ? "\n[setup] Complete.\n"
+        : "\n[setup] Failed. Review the output above.\n",
+    );
     return res.end();
   } catch (err) {
     console.error("[/setup/api/run] error:", err);
     if (!res.headersSent) {
-      return res.status(500).type("text/plain").send(`Internal error: ${String(err)}\n`);
+      return res
+        .status(500)
+        .type("text/plain")
+        .send(`Internal error: ${String(err)}\n`);
     }
     stream(`\n[setup] Internal error: ${String(err)}\n`);
     return res.end();
@@ -999,6 +1546,353 @@ app.post("/setup/api/reset", requireSetupAuth, async (_req, res) => {
   }
 });
 
+app.post("/setup/api/wipe", requireSetupAuth, async (req, res) => {
+  const provided = String(req.body?.password ?? "");
+  const expected = SETUP_PASSWORD ?? "";
+  const providedBuf = Buffer.from(provided, "utf8");
+  const expectedBuf = Buffer.from(expected, "utf8");
+  const passwordOk =
+    expected.length > 0 &&
+    providedBuf.length === expectedBuf.length &&
+    crypto.timingSafeEqual(providedBuf, expectedBuf);
+
+  if (!passwordOk) {
+    return res.status(401).json({
+      ok: false,
+      error: "Setup password did not match. Wipe aborted.",
+    });
+  }
+
+  try {
+    serverLog.warn("wrapper", "wipe requested — stopping gateway and clearing all data");
+    shuttingDown = false;
+    intentionallyRestarting = true;
+    if (gatewayProc) {
+      try {
+        gatewayProc.kill("SIGTERM");
+        await Promise.race([
+          new Promise((resolve) => gatewayProc.on("exit", resolve)),
+          new Promise((resolve) => setTimeout(resolve, 3000)),
+        ]);
+        if (gatewayProc && !gatewayProc.killed) gatewayProc.kill("SIGKILL");
+      } catch {
+        /* best-effort */
+      }
+      gatewayProc = null;
+    }
+    try {
+      await Promise.race([
+        runCmd(OPENCLAW_NODE, clawArgs(["gateway", "stop"])),
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ]);
+    } catch {
+      /* best-effort */
+    }
+
+    const wipeDirContents = (dir) => {
+      if (!fs.existsSync(dir)) return;
+      for (const entry of fs.readdirSync(dir)) {
+        fs.rmSync(path.join(dir, entry), { recursive: true, force: true });
+      }
+    };
+    wipeDirContents(STATE_DIR);
+    wipeDirContents(WORKSPACE_DIR);
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+
+    cachedOpenclawVersion = null;
+    cachedChannelsHelp = null;
+    intentionallyRestarting = false;
+    consecutiveRestartCount = 0;
+
+    serverLog.warn("wrapper", "wipe complete — all data cleared");
+    return res.json({
+      ok: true,
+      output: "All data cleared. Reload the page to start fresh.",
+    });
+  } catch (err) {
+    serverLog.error("wrapper", `wipe failed: ${err?.message || String(err)}`);
+    return res.status(500).json({
+      ok: false,
+      error: `Wipe failed: ${err?.message || String(err)}`,
+    });
+  }
+});
+
+const IMPORT_BODY_LIMIT = process.env.IMPORT_MAX_BYTES || "500mb";
+
+app.post(
+  "/setup/api/import/probe",
+  requireSetupAuth,
+  express.raw({
+    type: ["application/zip", "application/octet-stream"],
+    limit: IMPORT_BODY_LIMIT,
+  }),
+  async (req, res) => {
+    if (!req.body || !req.body.length) {
+      return res
+        .status(400)
+        .json({ ok: false, error: "No file received in request body." });
+    }
+    cleanupStaleImportStages();
+    const stagingId = crypto.randomBytes(16).toString("hex");
+    const stageDir = importStagingPath(stagingId);
+    const zipFile = path.join(IMPORT_STAGING_ROOT, `${stagingId}.zip`);
+    const zipPassword = typeof req.query?.password === "string" ? req.query.password : "";
+
+    try {
+      fs.mkdirSync(IMPORT_STAGING_ROOT, { recursive: true });
+      fs.writeFileSync(zipFile, req.body);
+
+      const probe = await probeZipNeedsPassword(zipFile, zipPassword);
+      if (!probe.ok) {
+        if (probe.needsPassword) {
+          // Keep the upload around so the user can submit a password without re-uploading.
+          return res.status(401).json({
+            ok: false,
+            needsPassword: true,
+            stagingId,
+            error:
+              "This archive is password-protected. Enter the export password to continue.",
+          });
+        }
+        // Bad zip: clean up immediately.
+        try { fs.rmSync(zipFile, { force: true }); } catch { /* */ }
+        return res.status(400).json({
+          ok: false,
+          error: "Could not read this archive. Make sure it's a valid OpenClaw export ZIP.",
+          output: probe.output?.slice(-2000),
+        });
+      }
+
+      const extract = await extractZipTo(zipFile, zipPassword, stageDir);
+      if (!extract.ok) {
+        try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch { /* */ }
+        try { fs.rmSync(zipFile, { force: true }); } catch { /* */ }
+        return res.status(400).json({
+          ok: false,
+          error: "Failed to extract archive contents.",
+          output: extract.output?.slice(-2000),
+        });
+      }
+
+      const layout = findStagedDataRoot(stageDir);
+      if (!layout.ok) {
+        try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch { /* */ }
+        try { fs.rmSync(zipFile, { force: true }); } catch { /* */ }
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Archive does not match the expected layout (data/.openclaw/openclaw.json). Imports only work with exports from this template.",
+        });
+      }
+
+      const manifest = summarizeStagedImport(layout.stateDir, layout.workspaceDir);
+
+      // Persist the resolved layout next to the staged data so /apply can find it without re-scanning.
+      fs.writeFileSync(
+        path.join(stageDir, ".staging-meta.json"),
+        JSON.stringify(
+          {
+            stagingId,
+            zipFile,
+            stateDir: layout.stateDir,
+            workspaceDir: layout.workspaceDir,
+            manifest,
+          },
+          null,
+          2,
+        ),
+      );
+
+      // The zip can be removed now — extracted data is what we'll apply.
+      try { fs.rmSync(zipFile, { force: true }); } catch { /* */ }
+
+      serverLog.info(
+        "import",
+        `staged ${stagingId} sessions=${manifest.sessionCount} workspace=${manifest.hasWorkspace}`,
+      );
+      return res.json({ ok: true, stagingId, manifest });
+    } catch (err) {
+      try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch { /* */ }
+      try { fs.rmSync(zipFile, { force: true }); } catch { /* */ }
+      serverLog.error("import", `probe failed: ${err.message || String(err)}`);
+      return res
+        .status(500)
+        .json({ ok: false, error: `Probe failed: ${err.message || String(err)}` });
+    }
+  },
+);
+
+app.post("/setup/api/import/apply", requireSetupAuth, async (req, res) => {
+  const stagingId = String(req.body?.stagingId || "");
+  const provided = String(req.body?.setupPassword ?? "");
+  const expected = SETUP_PASSWORD ?? "";
+  const providedBuf = Buffer.from(provided, "utf8");
+  const expectedBuf = Buffer.from(expected, "utf8");
+  const passwordOk =
+    expected.length > 0 &&
+    providedBuf.length === expectedBuf.length &&
+    crypto.timingSafeEqual(providedBuf, expectedBuf);
+
+  if (!passwordOk) {
+    return res.status(401).json({
+      ok: false,
+      error: "Setup password did not match. Import aborted (no data was changed).",
+    });
+  }
+
+  const stageDir = importStagingPath(stagingId);
+  if (!stageDir || !fs.existsSync(stageDir)) {
+    return res.status(404).json({
+      ok: false,
+      error: "Staged import not found or expired. Re-upload the archive and try again.",
+    });
+  }
+
+  const metaPath = path.join(stageDir, ".staging-meta.json");
+  let stagedStateDir, stagedWorkspaceDir;
+  try {
+    const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+    stagedStateDir = meta.stateDir;
+    stagedWorkspaceDir = meta.workspaceDir;
+    if (!fs.existsSync(stagedStateDir)) {
+      throw new Error("Staged .openclaw directory missing.");
+    }
+  } catch (err) {
+    return res.status(500).json({
+      ok: false,
+      error: `Could not read staging metadata: ${err.message}`,
+    });
+  }
+
+  const rollbackId = crypto.randomBytes(8).toString("hex");
+  const rollbackBase = `${IMPORT_ROLLBACK_DIR}.${rollbackId}`;
+  const rollbackState = `${rollbackBase}.state`;
+  const rollbackWorkspace = `${rollbackBase}.workspace`;
+  let rolledBack = false;
+  let stagedFixesApplied = false;
+
+  serverLog.warn("import", `apply ${stagingId} starting — replacing live data`);
+
+  // Stop the gateway so we can safely swap directories.
+  intentionallyRestarting = true;
+  if (gatewayProc) {
+    try {
+      gatewayProc.kill("SIGTERM");
+      await Promise.race([
+        new Promise((resolve) => gatewayProc.on("exit", resolve)),
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ]);
+      if (gatewayProc && !gatewayProc.killed) gatewayProc.kill("SIGKILL");
+    } catch { /* */ }
+    gatewayProc = null;
+  }
+  try {
+    await Promise.race([
+      runCmd(OPENCLAW_NODE, clawArgs(["gateway", "stop"])),
+      new Promise((resolve) => setTimeout(resolve, 3000)),
+    ]);
+  } catch { /* */ }
+
+  try {
+    // Apply deployment-specific fixes to the STAGED data BEFORE we touch live state.
+    // If this fails, no destructive change has happened yet.
+    applyDeploymentFixesToStaged(stagedStateDir);
+    stagedFixesApplied = true;
+
+    // Snapshot live data into rollback dirs (atomic rename), then point live dirs at staged data.
+    if (fs.existsSync(STATE_DIR)) {
+      fs.renameSync(STATE_DIR, rollbackState);
+    }
+    if (fs.existsSync(WORKSPACE_DIR)) {
+      fs.renameSync(WORKSPACE_DIR, rollbackWorkspace);
+    }
+
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+
+    copyDirInto(stagedStateDir, STATE_DIR);
+    if (fs.existsSync(stagedWorkspaceDir)) {
+      copyDirInto(stagedWorkspaceDir, WORKSPACE_DIR);
+    }
+
+    // Re-write the wrapper's gateway.token file so future restarts use it.
+    try {
+      fs.writeFileSync(path.join(STATE_DIR, "gateway.token"), OPENCLAW_GATEWAY_TOKEN, {
+        encoding: "utf8",
+        mode: 0o600,
+      });
+    } catch (err) {
+      serverLog.warn(
+        "import",
+        `could not persist gateway.token after import: ${err.message}`,
+      );
+    }
+
+    // Cleanup staging.
+    try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch { /* */ }
+
+    // Cache invalidation.
+    cachedOpenclawVersion = null;
+    cachedChannelsHelp = null;
+    consecutiveRestartCount = 0;
+
+    serverLog.warn("import", `apply ${stagingId} complete — restarting gateway`);
+  } catch (err) {
+    serverLog.error("import", `apply failed: ${err.message || String(err)}`);
+    // Roll back if we got far enough to disturb live dirs.
+    try {
+      if (fs.existsSync(rollbackState)) {
+        fs.rmSync(STATE_DIR, { recursive: true, force: true });
+        fs.renameSync(rollbackState, STATE_DIR);
+      }
+      if (fs.existsSync(rollbackWorkspace)) {
+        fs.rmSync(WORKSPACE_DIR, { recursive: true, force: true });
+        fs.renameSync(rollbackWorkspace, WORKSPACE_DIR);
+      }
+      rolledBack = true;
+    } catch (rollbackErr) {
+      serverLog.error(
+        "import",
+        `rollback failed too — manual recovery required: ${rollbackErr.message}`,
+      );
+    }
+    intentionallyRestarting = false;
+    if (isConfigured()) {
+      ensureGatewayRunning().catch((restartErr) => {
+        serverLog.error(
+          "import",
+          `gateway restart after failed import: ${restartErr.message}`,
+        );
+      });
+    }
+    return res.status(500).json({
+      ok: false,
+      error: `Import failed: ${err.message || String(err)}${
+        rolledBack ? " (existing data was restored)" : " (rollback may be needed)"
+      }`,
+      stagedFixesApplied,
+    });
+  }
+
+  // Successful path: clean up rollback snapshots and bring the gateway back up.
+  intentionallyRestarting = false;
+  try { fs.rmSync(rollbackState, { recursive: true, force: true }); } catch { /* */ }
+  try { fs.rmSync(rollbackWorkspace, { recursive: true, force: true }); } catch { /* */ }
+
+  if (isConfigured()) {
+    ensureGatewayRunning().catch((err) => {
+      serverLog.error("import", `gateway restart after import: ${err.message}`);
+    });
+  }
+
+  return res.json({
+    ok: true,
+    output: "Import complete. Reload the page to use the imported configuration.",
+  });
+});
+
 app.post("/setup/api/doctor", requireSetupAuth, async (_req, res) => {
   const args = ["doctor", "--non-interactive", "--repair"];
   const result = await runCmd(OPENCLAW_NODE, clawArgs(args));
@@ -1012,9 +1906,6 @@ app.get("/setup/api/devices", requireSetupAuth, async (_req, res) => {
   try {
     const { listDevicePairing } = await loadDeviceBootstrapSdk();
     const data = await listDevicePairing();
-    console.log(
-      `[devices] local list pending=${data?.pending?.length ?? 0} paired=${data?.paired?.length ?? 0}`,
-    );
     return res.json({ ok: true, data });
   } catch (err) {
     const message = err?.message || String(err);
@@ -1054,9 +1945,9 @@ app.post("/setup/api/devices/approve", requireSetupAuth, async (req, res) => {
       }
     }
 
-    // /setup is guarded by SETUP_PASSWORD and runs in the same state volume
-    // as the gateway, so it acts as the trusted bootstrap admin surface.
     const result = await approveDevicePairing(targetRequestId, {
+      // /setup is guarded by SETUP_PASSWORD and runs in the same state volume
+      // as the gateway, so it acts as the trusted bootstrap admin surface.
       callerScopes: ["operator.admin"],
     });
 
@@ -1083,7 +1974,7 @@ app.post("/setup/api/devices/approve", requireSetupAuth, async (req, res) => {
     });
   } catch (err) {
     const message = err?.message || String(err);
-    console.error(`[devices] local approve failed: ${message}`);
+    console.warn(`[devices] local approve failed: ${message}`);
     return res.status(500).json({ ok: false, error: message });
   }
 });
@@ -1101,6 +1992,40 @@ app.post("/setup/api/devices/reject", requireSetupAuth, async (req, res) => {
   return res
     .status(result.code === 0 ? 200 : 500)
     .json({ ok: result.code === 0, output: result.output });
+});
+
+app.get("/setup/api/logs", requireSetupAuth, (req, res) => {
+  const limitParam = Number.parseInt(req.query?.limit ?? "", 10);
+  const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 200;
+  res.json({ ok: true, entries: serverLog.recent(limit) });
+});
+
+app.get("/setup/api/logs/stream", requireSetupAuth, (req, res) => {
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders?.();
+
+  for (const entry of serverLog.recent(100)) {
+    res.write(`data: ${JSON.stringify(entry)}\n\n`);
+  }
+
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(": ping\n\n");
+    } catch {
+      clearInterval(heartbeat);
+    }
+  }, 25000);
+
+  const unsubscribe = serverLog.subscribe(res);
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  });
 });
 
 app.get("/setup/api/export", requireSetupAuth, async (_req, res) => {
@@ -1357,32 +2282,31 @@ app.use(async (req, res) => {
   }
 
   if (req.path === "/openclaw" && !req.query.token) {
-    // Token is no longer auto-injected via URL.
-    // Users must manually paste it in Dashboard > Overview > Gateway Token.
+    return res.redirect(`/openclaw?token=${OPENCLAW_GATEWAY_TOKEN}`);
   }
 
   return proxy.web(req, res, { target: GATEWAY_TARGET });
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`[wrapper] listening on port ${PORT}`);
-  console.log(`[wrapper] setup wizard: http://localhost:${PORT}/setup`);
-  console.log(`[wrapper] web TUI: ${ENABLE_WEB_TUI ? "enabled" : "disabled"}`);
-  console.log(`[wrapper] configured: ${isConfigured()}`);
+  serverLog.info("wrapper", `listening on port ${PORT}`);
+  serverLog.info("wrapper", `setup wizard: http://localhost:${PORT}/setup`);
+  serverLog.info("wrapper", `web TUI: ${ENABLE_WEB_TUI ? "enabled" : "disabled"}`);
+  serverLog.info("wrapper", `configured: ${isConfigured()}`);
 
   if (isConfigured()) {
     (async () => {
       try {
-        console.log("[wrapper] running openclaw doctor --fix...");
+        serverLog.info("wrapper", "running openclaw doctor --fix...");
         const dr = await runCmd(OPENCLAW_NODE, clawArgs(["doctor", "--fix"]));
-        console.log(`[wrapper] doctor --fix exit=${dr.code}`);
-        if (dr.output) console.log(dr.output);
+        serverLog.info("wrapper", `doctor --fix exit=${dr.code}`);
+        if (dr.output) serverLog.info("wrapper", dr.output.trim());
       } catch (err) {
-        console.warn(`[wrapper] doctor --fix failed: ${err.message}`);
+        serverLog.warn("wrapper", `doctor --fix failed: ${err.message}`);
       }
       await ensureGatewayRunning();
     })().catch((err) => {
-      console.error(`[wrapper] failed to start gateway at boot: ${err.message}`);
+      serverLog.error("wrapper", `failed to start gateway at boot: ${err.message}`);
     });
   }
 });
@@ -1432,7 +2356,7 @@ server.on("upgrade", async (req, socket, head) => {
 });
 
 async function gracefulShutdown(signal) {
-  console.log(`[wrapper] received ${signal}, shutting down`);
+  serverLog.info("wrapper", `received ${signal}, shutting down`);
   shuttingDown = true;
 
   if (setupRateLimiter.cleanupInterval) {
@@ -1460,8 +2384,18 @@ async function gracefulShutdown(signal) {
         gatewayProc.kill("SIGKILL");
       }
     } catch (err) {
-      console.warn(`[wrapper] error killing gateway: ${err.message}`);
+      serverLog.warn("wrapper", `error killing gateway: ${err.message}`);
     }
+  }
+
+  // Best-effort: ask the CLI to clean up any persisted gateway service state.
+  try {
+    await Promise.race([
+      runCmd(OPENCLAW_NODE, clawArgs(["gateway", "stop"])),
+      new Promise((resolve) => setTimeout(resolve, 3000)),
+    ]);
+  } catch {
+    // best-effort; we're exiting anyway
   }
 
   process.exit(0);
