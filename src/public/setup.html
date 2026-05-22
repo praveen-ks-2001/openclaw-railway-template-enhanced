@@ -1103,7 +1103,7 @@
 
                   <!-- Primary Actions -->
                   <section class="card space-y-3">
-                    <a href="/openclaw" target="_blank" class="btn btn-success w-full">
+                    <a :href="'/openclaw#token=' + encodeURIComponent(gatewayToken)" target="_blank" class="btn btn-success w-full">
                       Open OpenClaw UI
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
