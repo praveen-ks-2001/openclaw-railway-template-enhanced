@@ -67,6 +67,7 @@
         status: 'Loading...',
         configured: false,
         openclawVersion: '',
+        versionInfo: null,
         authGroups: [],
         selectedGroup: '',
         authChoices: [],
@@ -95,6 +96,8 @@
         gatewayToken: '',
         loginUrl: '',
         loginCode: '',
+        loginUrlCopied: false,
+        loginCodeCopied: false,
         setupStreamTail: '',
         setupError: '',
         showWipeModal: false,
@@ -116,20 +119,20 @@
         cloudflareAccountId: '',
         cloudflareGatewayId: '',
 
+        // The currently-selected provider option object (carries kind/note/hint
+        // metadata sent by the server's AUTH_CATALOG).
+        get selectedOption() {
+          return (this.authChoices || []).find(o => o.value === this.selectedAuth) || null;
+        },
+
         get authRequiresSecret() {
-          const noSecretChoices = new Set([
-            'openai-codex-device-code',
-            'google-gemini-cli',
-            'github-copilot',
-            'copilot-proxy',
-            'minimax-global-oauth',
-            'minimax-cn-oauth',
-            'chutes',
-            'ollama',
-            'vllm',
-            'sglang',
-          ]);
-          return !noSecretChoices.has(this.selectedAuth);
+          return this.selectedOption?.kind === 'key';
+        },
+
+        // Device-code OAuth (e.g. ChatGPT / Grok sign-in) — runs in-wizard via
+        // PTY; the verification URL + code stream into the log box below.
+        get isDeviceChoice() {
+          return this.selectedOption?.kind === 'device';
         },
 
         get isCustomEndpointChoice() {
@@ -141,27 +144,12 @@
         },
 
         get authHelp() {
-          switch (this.selectedAuth) {
-            case 'openai-codex-device-code':
-              return 'No API key needed. After clicking Run Setup, a ChatGPT login URL and code will appear below.';
-            case 'google-gemini-cli':
-              return 'OAuth via Google. The CLI will print a sign-in URL during onboarding.';
-            case 'github-copilot':
-              return 'GitHub device login. Open the URL printed during onboarding and approve the device code.';
-            case 'copilot-proxy':
-              return 'Uses a local Copilot proxy. No remote API key needed.';
-            case 'minimax-global-oauth':
-            case 'minimax-cn-oauth':
-              return 'OAuth via MiniMax. Sign-in URL will appear during onboarding.';
-            case 'chutes':
-              return 'Free-tier OAuth flow. Sign in via the URL printed during onboarding.';
-            case 'ollama':
-            case 'vllm':
-            case 'sglang':
-              return 'Self-hosted runtime. Make sure the server is reachable from this container.';
-            default:
-              return '';
-          }
+          const o = this.selectedOption;
+          if (!o) return '';
+          if (o.note) return o.note;
+          if (o.kind === 'device') return 'No API key needed. Click Run Setup — a sign-in URL and short code appear in the log below. Open the URL, enter the code, and keep this page open until it completes.';
+          if (o.kind === 'none') return 'No API key needed for this provider.';
+          return '';
         },
 
         get currentGroup() {
@@ -188,6 +176,7 @@
             const j = await this.httpJson('/setup/api/status');
             this.configured = j.configured;
             this.openclawVersion = j.openclawVersion || '';
+            this.versionInfo = j.versionInfo || null;
             this.tuiEnabled = j.tuiEnabled || false;
             this.gatewayToken = j.gatewayToken || '';
             this.status = j.configured ? 'Configured - open /openclaw' : 'Not configured - run setup below';
@@ -286,11 +275,19 @@
         },
 
         extractLoginDetails(text) {
-          const urlMatch = text.match(/https:\/\/auth\.openai\.com\/codex\/device[^\s)]*/);
-          if (urlMatch) this.loginUrl = urlMatch[0];
-          const codeMatches = [...text.matchAll(/\bCode:\s*([A-Z0-9][A-Z0-9-]{3,})\b/g)];
-          const visibleCode = codeMatches.map(m => m[1]).find(code => code !== 'shown');
-          if (visibleCode) this.loginCode = visibleCode;
+          // The device-code box prints e.g.:
+          //   URL: https://auth.openai.com/codex/device
+          //   Code: MPON-M64WT
+          // Prefer the URL after a "URL:" label; fall back to known auth hosts.
+          const urlByLabel = text.match(/\bURL:\s*(https:\/\/[^\s)\]│]+)/i);
+          const urlByHost = text.match(/https:\/\/(?:auth\.openai\.com|chatgpt\.com|chat\.openai\.com|[a-z0-9.]*x\.ai|[a-z0-9.]*grok\.com)\/[^\s)\]│]*/i);
+          const url = (urlByLabel && urlByLabel[1]) || (urlByHost && urlByHost[0]);
+          if (url) this.loginUrl = url;
+          // Require the "Code:"/"User code:" label WITH a colon and match an
+          // UPPERCASE token (case-sensitive) so we never grab words like "below"
+          // from "enter the code below." or "expires" from "Code expires in...".
+          const codeMatch = text.match(/(?:[Uu]ser[\s-]?[Cc]ode|[Cc]ode)\s*[:=]\s*([A-Z0-9]{3,}-[A-Z0-9]{3,}|[A-Z0-9]{4,})/);
+          if (codeMatch) this.loginCode = codeMatch[1];
         },
 
         extractSetupFailure(text) {
@@ -762,7 +759,7 @@
           <div class="mt-4 p-3 rounded-lg bg-[var(--color-warning)]/10 border border-[var(--color-warning)]/30">
             <p class="text-[11px] uppercase tracking-widest text-[var(--color-warning)] font-semibold mb-1.5">Heads up</p>
             <p class="text-[12px] text-[var(--color-text-secondary)] leading-relaxed">
-              Set <code class="text-[11px] bg-[var(--color-surface-overlay)] px-1 py-0.5 rounded text-[var(--color-text-primary)]">OPENCLAW_VERSION</code> to <strong class="text-[var(--color-text-primary)]">2026.5.X</strong> or newer in your Railway env vars. This template has been updated for the latest OpenClaw releases.
+              This template is pinned to OpenClaw <strong class="text-[var(--color-text-primary)]">2026.6.6</strong>. To run a different release, set <code class="text-[11px] bg-[var(--color-surface-overlay)] px-1 py-0.5 rounded text-[var(--color-text-primary)]">OPENCLAW_VERSION</code> in your Railway env vars (overrides the Dockerfile default).
             </p>
           </div>
 
@@ -797,6 +794,32 @@
       <!-- MAIN CONTENT AREA -->
       <main class="flex-1 w-full max-w-3xl">
         <div class="px-6 space-y-8">
+
+          <!-- Version compatibility bump notice -->
+          <div x-show="versionInfo && versionInfo.bumped" x-cloak
+            class="bg-[var(--color-warning)]/10 border border-[var(--color-warning)]/40 rounded-lg p-4 flex items-start gap-3">
+            <svg class="w-5 h-5 text-[var(--color-warning)] shrink-0 mt-0.5" fill="none" stroke="currentColor"
+              viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <div class="text-sm text-[var(--color-text-secondary)] leading-relaxed">
+              <p class="font-semibold text-[var(--color-text-primary)] mb-1">OpenClaw version auto-bumped for
+                compatibility</p>
+              <p>You requested <code
+                  class="text-[12px] bg-[var(--color-surface-overlay)] px-1 py-0.5 rounded text-[var(--color-text-primary)]"
+                  x-text="versionInfo && versionInfo.requested"></code>, but this template requires at least
+                <code
+                  class="text-[12px] bg-[var(--color-surface-overlay)] px-1 py-0.5 rounded text-[var(--color-text-primary)]"
+                  x-text="versionInfo && versionInfo.minimum"></code>, so it was started on
+                <code
+                  class="text-[12px] bg-[var(--color-surface-overlay)] px-1 py-0.5 rounded text-[var(--color-text-primary)]"
+                  x-text="versionInfo && versionInfo.effective"></code>.
+                To run a newer version, set <code
+                  class="text-[12px] bg-[var(--color-surface-overlay)] px-1 py-0.5 rounded text-[var(--color-text-primary)]">OPENCLAW_VERSION</code>
+                (≥ <span x-text="versionInfo && versionInfo.minimum"></span>) in your Railway Variables.</p>
+            </div>
+          </div>
 
           <!-- ===================== PRE-SETUP VIEW ===================== -->
           <template x-if="isReady && !configured">
@@ -883,7 +906,7 @@
                   <div>
                     <label
                       class="block text-xs uppercase tracking-wide text-[var(--color-text-muted)] font-medium mb-2">Model</label>
-                    <input x-model="model" type="text" placeholder="e.g. anthropic/claude-opus-4-7, minimax/MiniMax-M2.7"
+                    <input x-model="model" type="text" placeholder="e.g. anthropic/claude-opus-4-8, minimax/MiniMax-M3"
                       class="input-field" />
                     <p class="text-xs text-[var(--color-text-muted)] mt-1.5">Format: provider/model-name</p>
                   </div>
@@ -975,6 +998,12 @@
                     </div>
                   </dl>
                 </div>
+                <div x-show="isDeviceChoice"
+                  class="bg-[#6e40c9]/10 border border-[#6e40c9]/30 rounded-lg p-3 mb-4 text-xs text-[var(--color-text-secondary)] leading-relaxed">
+                  This is a device-code sign-in. Click <strong class="text-[var(--color-text-primary)]">Run Setup</strong>
+                  — a sign-in URL and code will stream into the log below. Open the URL, enter the code, and keep this
+                  page open until it finishes.
+                </div>
                 <div class="flex flex-wrap items-center gap-3 mb-4">
                   <button @click="runSetup()" :disabled="loading" class="btn btn-primary">
                     <span x-show="!loading">▶ Run Setup</span>
@@ -989,14 +1018,37 @@
                   <button @click="resetSetup()" :disabled="loading" class="btn btn-danger">Reset</button>
                 </div>
                 <div x-show="loginUrl || loginCode"
-                  class="bg-[#6e40c9]/10 border border-[#6e40c9]/40 rounded-lg p-4 mb-4">
-                  <p class="text-[10px] uppercase tracking-widest text-[#a779e9] font-semibold mb-2">ChatGPT Login</p>
-                  <a x-show="loginUrl" :href="loginUrl" target="_blank" rel="noopener noreferrer"
-                    class="block text-sm text-[var(--color-accent)] hover:underline break-all mb-2"
-                    x-text="loginUrl"></a>
-                  <div x-show="loginCode"
-                    class="font-mono text-xl font-bold text-[var(--color-text-primary)] tracking-widest bg-[var(--color-surface)] rounded px-3 py-2 inline-block"
-                    x-text="loginCode"></div>
+                  class="bg-[#6e40c9]/10 border border-[#6e40c9]/40 rounded-lg p-4 mb-4 space-y-3">
+                  <p class="text-[10px] uppercase tracking-widest text-[#a779e9] font-semibold">Device sign-in</p>
+                  <p class="text-xs text-[var(--color-text-secondary)] leading-relaxed">Open the URL, enter the code, and
+                    keep this page open until setup finishes.</p>
+
+                  <!-- Sign-in URL + copy + open -->
+                  <div x-show="loginUrl">
+                    <label class="block text-[10px] uppercase tracking-widest text-[var(--color-text-muted)] font-semibold mb-1">Sign-in URL</label>
+                    <div class="flex items-stretch gap-2">
+                      <code class="flex-1 min-w-0 bg-[var(--color-surface)] border border-[var(--color-border-muted)] rounded-lg px-3 py-2 text-xs text-[var(--color-text-secondary)] font-mono break-all" x-text="loginUrl"></code>
+                      <button type="button"
+                        @click="navigator.clipboard.writeText(loginUrl).then(() => { loginUrlCopied = true; setTimeout(() => loginUrlCopied = false, 2500); })"
+                        class="btn btn-secondary text-xs shrink-0">
+                        <span x-text="loginUrlCopied ? '✓' : 'Copy'"></span>
+                      </button>
+                      <a :href="loginUrl" target="_blank" rel="noopener noreferrer" class="btn btn-primary text-xs shrink-0">Open ↗</a>
+                    </div>
+                  </div>
+
+                  <!-- Code + copy (prominent) -->
+                  <div x-show="loginCode">
+                    <label class="block text-[10px] uppercase tracking-widest text-[var(--color-text-muted)] font-semibold mb-1">Code</label>
+                    <div class="flex items-center gap-2">
+                      <span class="font-mono text-2xl font-bold text-[var(--color-text-primary)] tracking-widest bg-[var(--color-surface)] border border-[var(--color-border-muted)] rounded-lg px-4 py-2" x-text="loginCode"></span>
+                      <button type="button"
+                        @click="navigator.clipboard.writeText(loginCode).then(() => { loginCodeCopied = true; setTimeout(() => loginCodeCopied = false, 2500); })"
+                        class="btn btn-secondary text-sm shrink-0">
+                        <span x-text="loginCodeCopied ? '✓ Copied' : 'Copy code'"></span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 <div x-show="setupError"
                   class="bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/40 rounded-lg p-3 mb-4 text-sm text-[var(--color-danger)]"

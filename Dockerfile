@@ -1,4 +1,4 @@
-FROM node:22-bookworm
+FROM node:24-bookworm
 
 RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -36,6 +36,10 @@ ENV HOMEBREW_PREFIX="/home/linuxbrew/.linuxbrew"
 ENV HOMEBREW_CELLAR="/home/linuxbrew/.linuxbrew/Cellar"
 ENV HOMEBREW_REPOSITORY="/home/linuxbrew/.linuxbrew/Homebrew"
 
+# Pin the OpenClaw version this template is verified against (latest stable: 2026.6.6).
+# entrypoint.sh installs openclaw@${OPENCLAW_VERSION} at boot; override in Railway
+# Variables to deploy a different version without rebuilding the image.
+ENV OPENCLAW_VERSION=2026.6.6
 ENV PORT=8080
 ENV OPENCLAW_ENTRY=/usr/local/lib/node_modules/openclaw/dist/entry.js
 EXPOSE 8080

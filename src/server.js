@@ -175,8 +175,317 @@ function cleanPtyOutput(value) {
   return cleaned ? `${cleaned}\n` : "";
 }
 
+// ---------------------------------------------------------------------------
+// Auth provider catalog — single source of truth for the setup wizard.
+//
+// Verified against OpenClaw 2026.6.6 (`openclaw onboard --help` + offline
+// non-interactive onboard probes). Each option declares how its credential is
+// supplied:
+//   kind: "key"     -> paste an API key/token; `flag` carries it to onboard.
+//   kind: "device"  -> device-code OAuth driven in-wizard via PTY (OpenClaw
+//                      prints a verification URL + short code we stream + scrape).
+//   kind: "none"    -> no secret needed; onboarded non-interactively.
+// `note` is optional extra guidance shown under the field/panel.
+//
+// NOTE: redirect/PKCE OAuth flows (codex browser login, openrouter-oauth,
+// qwen-oauth, gemini-cli, minimax-oauth, chutes, etc.) are intentionally NOT
+// offered — they need a localhost callback the user's browser can't reach on a
+// remote Railway container, so only device-code OAuth is exposed.
+// ---------------------------------------------------------------------------
+const AUTH_CATALOG = [
+  {
+    value: "openai",
+    label: "OpenAI",
+    hint: "API key / ChatGPT",
+    options: [
+      { value: "openai-api-key", label: "OpenAI API key", kind: "key", flag: "--openai-api-key" },
+      { value: "openai-device-code", label: "ChatGPT sign-in (device code)", hint: "Use a ChatGPT/Codex subscription — no API key", kind: "device" },
+    ],
+  },
+  {
+    value: "anthropic",
+    label: "Anthropic",
+    hint: "API key",
+    options: [{ value: "apiKey", label: "Anthropic API key", kind: "key", flag: "--anthropic-api-key" }],
+  },
+  {
+    value: "google",
+    label: "Google",
+    hint: "API key / OAuth",
+    options: [
+      { value: "gemini-api-key", label: "Google Gemini API key", kind: "key", flag: "--gemini-api-key" },
+    ],
+  },
+  {
+    value: "xai",
+    label: "xAI (Grok)",
+    hint: "API key / OAuth",
+    options: [
+      { value: "xai-api-key", label: "xAI API key", kind: "key", flag: "--xai-api-key" },
+      { value: "xai-device-code", label: "Grok sign-in (device code)", hint: "Use a SuperGrok / X Premium subscription — no API key", kind: "device" },
+    ],
+  },
+  {
+    value: "deepseek",
+    label: "DeepSeek",
+    hint: "API key",
+    options: [{ value: "deepseek-api-key", label: "DeepSeek API key", kind: "key", flag: "--deepseek-api-key" }],
+  },
+  {
+    value: "openrouter",
+    label: "OpenRouter",
+    hint: "API key / OAuth",
+    options: [
+      { value: "openrouter-api-key", label: "OpenRouter API key", kind: "key", flag: "--openrouter-api-key" },
+    ],
+  },
+  {
+    value: "mistral",
+    label: "Mistral AI",
+    hint: "API key",
+    options: [{ value: "mistral-api-key", label: "Mistral API key", kind: "key", flag: "--mistral-api-key" }],
+  },
+  {
+    value: "together",
+    label: "Together AI",
+    hint: "API key",
+    options: [{ value: "together-api-key", label: "Together AI API key", kind: "key", flag: "--together-api-key" }],
+  },
+  {
+    value: "huggingface",
+    label: "Hugging Face",
+    hint: "API key",
+    options: [{ value: "huggingface-api-key", label: "Hugging Face API key", kind: "key", flag: "--huggingface-api-key" }],
+  },
+  {
+    value: "cerebras",
+    label: "Cerebras",
+    hint: "API key — fast inference",
+    options: [{ value: "cerebras-api-key", label: "Cerebras API key", kind: "key", flag: "--cerebras-api-key" }],
+  },
+  {
+    value: "fireworks",
+    label: "Fireworks AI",
+    hint: "API key",
+    options: [{ value: "fireworks-api-key", label: "Fireworks API key", kind: "key", flag: "--fireworks-api-key" }],
+  },
+  {
+    value: "deepinfra",
+    label: "DeepInfra",
+    hint: "API key",
+    options: [{ value: "deepinfra-api-key", label: "DeepInfra API key", kind: "key", flag: "--deepinfra-api-key" }],
+  },
+  {
+    value: "novita",
+    label: "Novita AI",
+    hint: "API key",
+    options: [{ value: "novita-api-key", label: "Novita AI API key", kind: "key", flag: "--novita-api-key" }],
+  },
+  {
+    value: "nvidia",
+    label: "NVIDIA",
+    hint: "API key (build.nvidia.com)",
+    options: [{ value: "nvidia-api-key", label: "NVIDIA API key", kind: "key", flag: "--nvidia-api-key" }],
+  },
+  {
+    value: "gmi",
+    label: "GMI Cloud",
+    hint: "API key",
+    options: [{ value: "gmi-api-key", label: "GMI Cloud API key", kind: "key", flag: "--gmi-api-key" }],
+  },
+  {
+    value: "arcee",
+    label: "Arcee AI",
+    hint: "Direct API key or via OpenRouter",
+    options: [
+      { value: "arceeai-api-key", label: "Arcee AI API key", kind: "key", flag: "--arceeai-api-key" },
+      { value: "arceeai-openrouter", label: "Arcee via OpenRouter key", kind: "key", flag: "--openrouter-api-key" },
+    ],
+  },
+  {
+    value: "moonshot",
+    label: "Moonshot AI",
+    hint: "Kimi K2 + Kimi Code",
+    options: [
+      { value: "moonshot-api-key", label: "Moonshot AI API key (Global)", kind: "key", flag: "--moonshot-api-key" },
+      { value: "moonshot-api-key-cn", label: "Moonshot AI API key (CN)", kind: "key", flag: "--moonshot-api-key" },
+      { value: "kimi-code-api-key", label: "Kimi Code API key", kind: "key", flag: "--kimi-code-api-key" },
+    ],
+  },
+  {
+    value: "zai",
+    label: "Z.AI (GLM 4.7)",
+    hint: "API key (multiple plans)",
+    options: [
+      { value: "zai-api-key", label: "Z.AI API key", kind: "key", flag: "--zai-api-key" },
+      { value: "zai-coding-global", label: "Z.AI Coding (Global)", kind: "key", flag: "--zai-api-key" },
+      { value: "zai-coding-cn", label: "Z.AI Coding (CN)", kind: "key", flag: "--zai-api-key" },
+      { value: "zai-global", label: "Z.AI Standard (Global)", kind: "key", flag: "--zai-api-key" },
+      { value: "zai-cn", label: "Z.AI Standard (CN)", kind: "key", flag: "--zai-api-key" },
+    ],
+  },
+  {
+    value: "minimax",
+    label: "MiniMax",
+    hint: "M2.7 — API key or OAuth",
+    options: [
+      { value: "minimax-global-api", label: "MiniMax API key (Global)", kind: "key", flag: "--minimax-api-key" },
+      { value: "minimax-cn-api", label: "MiniMax API key (CN)", kind: "key", flag: "--minimax-api-key" },
+    ],
+  },
+  {
+    value: "qwen",
+    label: "Qwen / Alibaba Model Studio",
+    hint: "DashScope / Model Studio API key",
+    options: [
+      { value: "qwen-api-key", label: "Qwen Coding Plan (Global)", kind: "key", flag: "--modelstudio-api-key" },
+      { value: "qwen-api-key-cn", label: "Qwen Coding Plan (CN)", kind: "key", flag: "--modelstudio-api-key-cn" },
+      { value: "qwen-standard-api-key", label: "Qwen Standard (Global)", kind: "key", flag: "--modelstudio-standard-api-key" },
+      { value: "qwen-standard-api-key-cn", label: "Qwen Standard (CN)", kind: "key", flag: "--modelstudio-standard-api-key-cn" },
+    ],
+  },
+  {
+    value: "stepfun",
+    label: "StepFun",
+    hint: "Standard or Plan, Intl/CN",
+    options: [
+      { value: "stepfun-standard-api-key-intl", label: "StepFun Standard (Intl)", kind: "key", flag: "--stepfun-api-key" },
+      { value: "stepfun-standard-api-key-cn", label: "StepFun Standard (CN)", kind: "key", flag: "--stepfun-api-key" },
+      { value: "stepfun-plan-api-key-intl", label: "StepFun Plan (Intl)", kind: "key", flag: "--stepfun-api-key" },
+      { value: "stepfun-plan-api-key-cn", label: "StepFun Plan (CN)", kind: "key", flag: "--stepfun-api-key" },
+    ],
+  },
+  {
+    value: "tokenhub",
+    label: "Tencent TokenHub",
+    hint: "API key",
+    options: [{ value: "tokenhub-api-key", label: "Tencent TokenHub API key", kind: "key", flag: "--tokenhub-api-key" }],
+  },
+  {
+    value: "ai-gateway",
+    label: "Vercel AI Gateway",
+    hint: "API key",
+    options: [{ value: "ai-gateway-api-key", label: "Vercel AI Gateway API key", kind: "key", flag: "--ai-gateway-api-key" }],
+  },
+  {
+    value: "cloudflare-ai-gateway",
+    label: "Cloudflare AI Gateway",
+    hint: "API key + account/gateway IDs",
+    options: [{ value: "cloudflare-ai-gateway-api-key", label: "Cloudflare AI Gateway API key", kind: "key", flag: "--cloudflare-ai-gateway-api-key" }],
+  },
+  {
+    value: "litellm",
+    label: "LiteLLM",
+    hint: "Proxy / multi-model router",
+    options: [{ value: "litellm-api-key", label: "LiteLLM API key", kind: "key", flag: "--litellm-api-key" }],
+  },
+  {
+    value: "venice",
+    label: "Venice",
+    hint: "API key",
+    options: [{ value: "venice-api-key", label: "Venice API key", kind: "key", flag: "--venice-api-key" }],
+  },
+  {
+    value: "chutes",
+    label: "Chutes",
+    hint: "Free tier OAuth or API key",
+    options: [
+      { value: "chutes-api-key", label: "Chutes API key", kind: "key", flag: "--chutes-api-key" },
+    ],
+  },
+  {
+    value: "kilocode",
+    label: "Kilocode",
+    hint: "API key",
+    options: [{ value: "kilocode-api-key", label: "Kilocode API key", kind: "key", flag: "--kilocode-api-key" }],
+  },
+  {
+    value: "copilot",
+    label: "Copilot",
+    hint: "Local Copilot proxy",
+    options: [
+      { value: "copilot-proxy", label: "Copilot Proxy (local)", kind: "none" },
+    ],
+  },
+  {
+    value: "synthetic",
+    label: "Synthetic",
+    hint: "Anthropic-compatible (multi-model)",
+    options: [{ value: "synthetic-api-key", label: "Synthetic API key", kind: "key", flag: "--synthetic-api-key" }],
+  },
+  {
+    value: "opencode",
+    label: "OpenCode",
+    hint: "Multi-model proxies",
+    options: [
+      { value: "opencode-zen", label: "OpenCode Zen", kind: "key", flag: "--opencode-zen-api-key" },
+      { value: "opencode-go", label: "OpenCode Go", kind: "key", flag: "--opencode-go-api-key" },
+    ],
+  },
+  {
+    value: "regional-cn",
+    label: "Other Chinese providers",
+    hint: "Xiaomi / Volcengine / BytePlus / Qianfan",
+    options: [
+      { value: "xiaomi-api-key", label: "Xiaomi MiMo API key (pay-as-you-go)", kind: "key", flag: "--xiaomi-api-key" },
+      { value: "xiaomi-token-plan-sgp", label: "Xiaomi MiMo Token Plan (Singapore)", kind: "key", flag: "--xiaomi-token-plan-api-key", note: 'Token Plan keys must start with "tp-".' },
+      { value: "xiaomi-token-plan-ams", label: "Xiaomi MiMo Token Plan (Amsterdam)", kind: "key", flag: "--xiaomi-token-plan-api-key", note: 'Token Plan keys must start with "tp-".' },
+      { value: "xiaomi-token-plan-cn", label: "Xiaomi MiMo Token Plan (China)", kind: "key", flag: "--xiaomi-token-plan-api-key", note: 'Token Plan keys must start with "tp-".' },
+      { value: "volcengine-api-key", label: "Volcengine (Doubao) API key", kind: "key", flag: "--volcengine-api-key" },
+      { value: "byteplus-api-key", label: "BytePlus API key", kind: "key", flag: "--byteplus-api-key" },
+      { value: "qianfan-api-key", label: "Baidu Qianfan API key", kind: "key", flag: "--qianfan-api-key" },
+    ],
+  },
+  {
+    value: "self-hosted",
+    label: "Self-hosted",
+    hint: "Ollama / vLLM / SGLang / LM Studio",
+    options: [
+      { value: "ollama", label: "Ollama (local)", kind: "none", note: "Point at a reachable Ollama host; localhost is not available on Railway." },
+      { value: "ollama-cloud", label: "Ollama Cloud", kind: "key", flag: "--ollama-cloud-api-key" },
+      { value: "lmstudio", label: "LM Studio", kind: "key", flag: "--lmstudio-api-key" },
+      { value: "vllm", label: "vLLM", kind: "none", note: "Point at a reachable vLLM server." },
+      { value: "sglang", label: "SGLang", kind: "none", note: "Point at a reachable SGLang server." },
+    ],
+  },
+  {
+    value: "custom",
+    label: "Custom provider",
+    hint: "OpenAI- or Anthropic-compatible endpoint",
+    options: [{ value: "custom-api-key", label: "Custom endpoint (base URL + model ID)", kind: "key", flag: "--custom-api-key" }],
+  },
+];
+
+// Public view sent to the wizard (omits internal `flag`).
+const AUTH_GROUPS_PUBLIC = AUTH_CATALOG.map((g) => ({
+  value: g.value,
+  label: g.label,
+  hint: g.hint,
+  options: g.options.map((o) => ({
+    value: o.value,
+    label: o.label,
+    hint: o.hint,
+    kind: o.kind,
+    note: o.note,
+  })),
+}));
+
+const ALL_AUTH_OPTIONS = AUTH_CATALOG.flatMap((g) => g.options);
+const AUTH_CHOICE_FLAGS = Object.fromEntries(
+  ALL_AUTH_OPTIONS.filter((o) => o.kind === "key" && o.flag).map((o) => [o.value, o.flag]),
+);
+const VALID_AUTH_CHOICES = new Set(ALL_AUTH_OPTIONS.map((o) => o.value));
+// Device-code OAuth flows (kind: "device") print a verification URL + short code
+// and poll — the only OAuth style that completes on a headless Railway container
+// (no localhost browser callback). We run these under a PTY and stream the URL +
+// code to the wizard. Redirect/PKCE OAuth flows are intentionally NOT offered:
+// they need a localhost callback the user's browser can't reach on Railway.
+const DEVICE_CODE_AUTH_CHOICES = new Set(
+  ALL_AUTH_OPTIONS.filter((o) => o.kind === "device").map((o) => o.value),
+);
+
 function requiresInteractiveOnboarding(payload) {
-  return payload.authChoice === "openai-codex-device-code";
+  return DEVICE_CODE_AUTH_CHOICES.has(payload.authChoice);
 }
 
 let deviceBootstrapSdkPromise = null;
@@ -817,238 +1126,23 @@ app.get("/logs", requireSetupAuth, (_req, res) => {
 app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
   const { version, channelsHelp } = await getOpenclawInfo();
 
-  const authGroups = [
-    {
-      value: "openai",
-      label: "OpenAI",
-      hint: "API key / ChatGPT",
-      options: [
-        { value: "openai-api-key", label: "OpenAI API key" },
-        {
-          value: "openai-codex-device-code",
-          label: "OpenAI Codex device pairing",
-          hint: "ChatGPT login without an API key",
-        },
-      ],
-    },
-    {
-      value: "anthropic",
-      label: "Anthropic",
-      hint: "API key",
-      options: [
-        { value: "apiKey", label: "Anthropic API key" },
-      ],
-    },
-    {
-      value: "google",
-      label: "Google",
-      hint: "API key / OAuth",
-      options: [
-        { value: "gemini-api-key", label: "Google Gemini API key" },
-        { value: "google-gemini-cli", label: "Gemini CLI (OAuth)" },
-      ],
-    },
-    {
-      value: "deepseek",
-      label: "DeepSeek",
-      hint: "API key",
-      options: [{ value: "deepseek-api-key", label: "DeepSeek API key" }],
-    },
-    {
-      value: "xai",
-      label: "xAI (Grok)",
-      hint: "API key",
-      options: [{ value: "xai-api-key", label: "xAI API key" }],
-    },
-    {
-      value: "mistral",
-      label: "Mistral AI",
-      hint: "API key",
-      options: [{ value: "mistral-api-key", label: "Mistral API key" }],
-    },
-    {
-      value: "together",
-      label: "Together AI",
-      hint: "API key",
-      options: [{ value: "together-api-key", label: "Together AI API key" }],
-    },
-    {
-      value: "huggingface",
-      label: "Hugging Face",
-      hint: "API key",
-      options: [{ value: "huggingface-api-key", label: "Hugging Face API key" }],
-    },
-    {
-      value: "openrouter",
-      label: "OpenRouter",
-      hint: "API key",
-      options: [{ value: "openrouter-api-key", label: "OpenRouter API key" }],
-    },
-    {
-      value: "ai-gateway",
-      label: "Vercel AI Gateway",
-      hint: "API key",
-      options: [
-        { value: "ai-gateway-api-key", label: "Vercel AI Gateway API key" },
-      ],
-    },
-    {
-      value: "cloudflare-ai-gateway",
-      label: "Cloudflare AI Gateway",
-      hint: "API key + account/gateway IDs",
-      options: [
-        {
-          value: "cloudflare-ai-gateway-api-key",
-          label: "Cloudflare AI Gateway API key",
-        },
-      ],
-    },
-    {
-      value: "litellm",
-      label: "LiteLLM",
-      hint: "Proxy / multi-model router",
-      options: [{ value: "litellm-api-key", label: "LiteLLM API key" }],
-    },
-    {
-      value: "moonshot",
-      label: "Moonshot AI",
-      hint: "Kimi K2 + Kimi Code",
-      options: [
-        { value: "moonshot-api-key", label: "Moonshot AI API key (Global)" },
-        { value: "moonshot-api-key-cn", label: "Moonshot AI API key (CN)" },
-        { value: "kimi-code-api-key", label: "Kimi Code API key" },
-      ],
-    },
-    {
-      value: "zai",
-      label: "Z.AI (GLM 4.7)",
-      hint: "API key (multiple plans)",
-      options: [
-        { value: "zai-api-key", label: "Z.AI API key" },
-        { value: "zai-coding-global", label: "Z.AI Coding (Global)" },
-        { value: "zai-coding-cn", label: "Z.AI Coding (CN)" },
-        { value: "zai-global", label: "Z.AI Standard (Global)" },
-        { value: "zai-cn", label: "Z.AI Standard (CN)" },
-      ],
-    },
-    {
-      value: "minimax",
-      label: "MiniMax",
-      hint: "M2.7 (recommended) — API key or OAuth",
-      options: [
-        { value: "minimax-global-api", label: "MiniMax API key (Global)" },
-        { value: "minimax-global-oauth", label: "MiniMax OAuth (Global)" },
-        { value: "minimax-cn-api", label: "MiniMax API key (CN)" },
-        { value: "minimax-cn-oauth", label: "MiniMax OAuth (CN)" },
-      ],
-    },
-    {
-      value: "qwen",
-      label: "Qwen",
-      hint: "API key",
-      options: [
-        { value: "qwen-api-key", label: "Qwen API key (Global)" },
-        { value: "qwen-api-key-cn", label: "Qwen API key (CN)" },
-      ],
-    },
-    {
-      value: "alibaba",
-      label: "Alibaba Model Studio",
-      hint: "DashScope / Model Studio",
-      options: [
-        {
-          value: "alibaba-model-studio-api-key",
-          label: "Alibaba Model Studio API key",
-        },
-      ],
-    },
-    {
-      value: "regional-cn",
-      label: "Other Chinese providers",
-      hint: "Xiaomi / Volcengine / BytePlus / Qianfan",
-      options: [
-        { value: "xiaomi-api-key", label: "Xiaomi API key" },
-        { value: "volcengine-api-key", label: "Volcengine API key" },
-        { value: "byteplus-api-key", label: "BytePlus API key" },
-        { value: "qianfan-api-key", label: "Baidu Qianfan API key" },
-      ],
-    },
-    {
-      value: "venice",
-      label: "Venice",
-      hint: "API key",
-      options: [{ value: "venice-api-key", label: "Venice API key" }],
-    },
-    {
-      value: "chutes",
-      label: "Chutes",
-      hint: "Free tier or API key",
-      options: [
-        { value: "chutes", label: "Chutes (free tier OAuth)" },
-        { value: "chutes-api-key", label: "Chutes API key" },
-      ],
-    },
-    {
-      value: "kilocode",
-      label: "Kilocode",
-      hint: "API key",
-      options: [{ value: "kilocode-api-key", label: "Kilocode API key" }],
-    },
-    {
-      value: "copilot",
-      label: "Copilot",
-      hint: "GitHub + local proxy",
-      options: [
-        {
-          value: "github-copilot",
-          label: "GitHub Copilot (GitHub device login)",
-        },
-        { value: "copilot-proxy", label: "Copilot Proxy (local)" },
-      ],
-    },
-    {
-      value: "synthetic",
-      label: "Synthetic",
-      hint: "Anthropic-compatible (multi-model)",
-      options: [{ value: "synthetic-api-key", label: "Synthetic API key" }],
-    },
-    {
-      value: "opencode",
-      label: "OpenCode",
-      hint: "Multi-model proxies",
-      options: [
-        { value: "opencode-zen", label: "OpenCode Zen" },
-        { value: "opencode-go", label: "OpenCode Go" },
-      ],
-    },
-    {
-      value: "self-hosted",
-      label: "Self-hosted",
-      hint: "Ollama / vLLM / SGLang — no API key needed",
-      options: [
-        { value: "ollama", label: "Ollama" },
-        { value: "vllm", label: "vLLM" },
-        { value: "sglang", label: "SGLang" },
-      ],
-    },
-    {
-      value: "custom",
-      label: "Custom provider",
-      hint: "OpenAI- or Anthropic-compatible endpoint",
-      options: [
-        { value: "custom-api-key", label: "Custom endpoint (base URL + model ID)" },
-      ],
-    },
-  ];
-
   res.json({
     configured: isConfigured(),
     gatewayTarget: GATEWAY_TARGET,
     openclawVersion: version,
     channelsAddHelp: channelsHelp,
-    authGroups,
+    authGroups: AUTH_GROUPS_PUBLIC,
     tuiEnabled: ENABLE_WEB_TUI,
     gatewayToken: OPENCLAW_GATEWAY_TOKEN,
+    // Version compatibility floor: entrypoint.sh bumps an older requested
+    // OPENCLAW_VERSION up to OPENCLAW_MINIMUM_VERSION before install and records
+    // the original request here so the wizard can explain the bump.
+    versionInfo: {
+      requested: process.env.OPENCLAW_REQUESTED_VERSION || null,
+      effective: process.env.OPENCLAW_VERSION || null,
+      minimum: process.env.OPENCLAW_MINIMUM_VERSION || null,
+      bumped: process.env.OPENCLAW_VERSION_BUMPED === "true",
+    },
   });
 });
 
@@ -1059,6 +1153,11 @@ function buildOnboardArgs(payload) {
     "--accept-risk",
     "--no-install-daemon",
     "--skip-health",
+    // Skip the "Enable hooks?" prompt outright (more robust than auto-answering
+    // it in the PTY flow), and keep the gateway token out of onboard's stdout so
+    // it isn't echoed into the device-code output we stream to the browser. (2026.6.x)
+    "--skip-hooks",
+    "--suppress-gateway-token-output",
     "--workspace",
     WORKSPACE_DIR,
     "--gateway-bind",
@@ -1090,45 +1189,9 @@ function buildOnboardArgs(payload) {
     args.push("--auth-choice", payload.authChoice);
 
     const secret = (payload.authSecret || "").trim();
-    const map = {
-      "openai-api-key": "--openai-api-key",
-      apiKey: "--anthropic-api-key",
-      "gemini-api-key": "--gemini-api-key",
-      "deepseek-api-key": "--deepseek-api-key",
-      "xai-api-key": "--xai-api-key",
-      "mistral-api-key": "--mistral-api-key",
-      "together-api-key": "--together-api-key",
-      "huggingface-api-key": "--huggingface-api-key",
-      "openrouter-api-key": "--openrouter-api-key",
-      "ai-gateway-api-key": "--ai-gateway-api-key",
-      "cloudflare-ai-gateway-api-key": "--cloudflare-ai-gateway-api-key",
-      "litellm-api-key": "--litellm-api-key",
-      "moonshot-api-key": "--moonshot-api-key",
-      "moonshot-api-key-cn": "--moonshot-api-key",
-      "kimi-code-api-key": "--kimi-code-api-key",
-      "zai-api-key": "--zai-api-key",
-      "zai-coding-global": "--zai-api-key",
-      "zai-coding-cn": "--zai-api-key",
-      "zai-global": "--zai-api-key",
-      "zai-cn": "--zai-api-key",
-      "minimax-global-api": "--minimax-api-key",
-      "minimax-cn-api": "--minimax-api-key",
-      "qwen-api-key": "--qwen-api-key",
-      "qwen-api-key-cn": "--qwen-api-key",
-      "alibaba-model-studio-api-key": "--alibaba-model-studio-api-key",
-      "xiaomi-api-key": "--xiaomi-api-key",
-      "volcengine-api-key": "--volcengine-api-key",
-      "byteplus-api-key": "--byteplus-api-key",
-      "qianfan-api-key": "--qianfan-api-key",
-      "venice-api-key": "--venice-api-key",
-      "chutes-api-key": "--chutes-api-key",
-      "kilocode-api-key": "--kilocode-api-key",
-      "synthetic-api-key": "--synthetic-api-key",
-      "opencode-zen": "--opencode-zen-api-key",
-      "opencode-go": "--opencode-go-api-key",
-      "custom-api-key": "--custom-api-key",
-    };
-    const flag = map[payload.authChoice];
+    // Credential flag per auth-choice, derived from AUTH_CATALOG (verified
+    // against `openclaw onboard --help` on 2026.6.6).
+    const flag = AUTH_CHOICE_FLAGS[payload.authChoice];
     if (flag && secret) {
       args.push(flag, secret);
     }
@@ -1241,62 +1304,9 @@ function runPtyCmd(cmd, args, opts = {}) {
   });
 }
 
-const VALID_AUTH_CHOICES = [
-  "openai-api-key",
-  "openai-codex",
-  "openai-codex-device-code",
-  "apiKey",
-  "gemini-api-key",
-  "google-gemini-cli",
-  "deepseek-api-key",
-  "xai-api-key",
-  "mistral-api-key",
-  "together-api-key",
-  "huggingface-api-key",
-  "openrouter-api-key",
-  "ai-gateway-api-key",
-  "cloudflare-ai-gateway-api-key",
-  "litellm-api-key",
-  "moonshot-api-key",
-  "moonshot-api-key-cn",
-  "kimi-code-api-key",
-  "zai-api-key",
-  "zai-coding-global",
-  "zai-coding-cn",
-  "zai-global",
-  "zai-cn",
-  "minimax-global-api",
-  "minimax-global-oauth",
-  "minimax-cn-api",
-  "minimax-cn-oauth",
-  "qwen-api-key",
-  "qwen-api-key-cn",
-  "alibaba-model-studio-api-key",
-  "xiaomi-api-key",
-  "volcengine-api-key",
-  "byteplus-api-key",
-  "qianfan-api-key",
-  "venice-api-key",
-  "chutes",
-  "chutes-api-key",
-  "kilocode-api-key",
-  "github-copilot",
-  "copilot-proxy",
-  "synthetic-api-key",
-  "opencode-zen",
-  "opencode-go",
-  "ollama",
-  "vllm",
-  "sglang",
-  "custom-api-key",
-];
-
 function validatePayload(payload) {
-  if (payload.authChoice && !VALID_AUTH_CHOICES.includes(payload.authChoice)) {
+  if (payload.authChoice && !VALID_AUTH_CHOICES.has(payload.authChoice)) {
     return `Invalid authChoice: ${payload.authChoice}`;
-  }
-  if (payload.authChoice === "openai-codex") {
-    return "OpenAI Codex browser login needs redirect-url input in an interactive terminal. Choose OpenAI Codex device pairing in web setup.";
   }
   const stringFields = [
     "telegramToken",
@@ -1467,14 +1477,18 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
         });
       }
 
-      stream("\n[setup] Starting gateway...\n");
-      await restartGateway();
-      stream("[setup] Gateway started.\n");
+      // Start the gateway in the background. First boot can take ~30-60s
+      // (plugin load + SQLite migrations); don't block the wizard's "Complete"
+      // on full readiness — the loading screen + /healthz polling cover the gap.
+      stream("\n[setup] Starting gateway in the background (first boot can take up to a minute)...\n");
+      ensureGatewayRunning().catch((err) => {
+        serverLog.error("setup", `gateway start after setup failed: ${err.message}`);
+      });
     }
 
     stream(
       ok
-        ? "\n[setup] Complete.\n"
+        ? "\n[setup] Complete. The gateway is finishing startup — open the OpenClaw UI (it may show a brief loading screen).\n"
         : "\n[setup] Failed. Review the output above.\n",
     );
     return res.end();
@@ -2280,6 +2294,7 @@ app.use(async (req, res) => {
       }
     }
   }
+
 
   return proxy.web(req, res, { target: GATEWAY_TARGET });
 });
