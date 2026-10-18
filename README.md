@@ -13,7 +13,7 @@ Chat securely through the built-in web dashboard, or integrate with Telegram, Di
 
 ### Step 1: Deploy on Railway
 
-1. Click the **"Deploy on Railway"** button at the top of this page &amp; wait for the initial deployment to complete (~3-5 minutes)
+1. Click the **"Deploy on Railway"** button at the top of this page &amp; wait for the initial deployment to complete. The first startup can take several minutes
 
 ### Step 2: Note Your Credentials
 
@@ -32,27 +32,27 @@ Check the **Variables** tab and save following:
 
 ### Step 4: Complete the Setup Wizard
 
-Once you log in, follow the intuitive 7-step guide on the left side of the setup screen to bring your AI agent online:
+1. Select your **provider & auth type**, then enter an API key if requested.
+2. Add **channels** if you want to use Telegram, Discord, or Slack. This is optional.
+3. Click **Run Setup**. For browser sign-in, open the sign-in URL and enter the code shown by the wizard; keep the setup page open until it completes.
+4. Click **Open OpenClaw UI**. If it is still starting, wait for the Gateway to become ready.
+5. If OpenClaw asks for a **Gateway secret**, return to `/setup`, click **Copy Gateway Token**, paste it into that field, and click **Connect**.
+6. If OpenClaw shows **Approve this browser** or a command such as `openclaw devices approve <requestId>`, keep that tab open. Return to `/setup` → **Pair Devices** → **Approve** the request with the same ID. Then return to OpenClaw; it connects automatically, or you can click **Check now**.
+7. Once OpenClaw shows **Connected**, you can start chatting.
 
-![OpenClaw setup using UI](https://res.cloudinary.com/asset-cloudinary/image/upload/v1772221059/setup_done_l8tzjn.png)
-
-1. Select your **provider & auth type**, then paste your API key
-2. Add **channels** (optional — can be done later)
-3. Click **Run Setup**
-4. If you added a channel token, click **Authorize Channel** and enter the code
-   *(After setup, message your bot on the channel. It will reply with a pairing code. Enter that code here to grant DM access.)*
-5. Click **Launch Dashboard**
-6. First login? Click **Approve Pairing** → **Approve Latest Request**
-   *(New browsers need a one-time device approval. After clicking "Launch Dashboard", come back here, click "Approve Pairing", and approve the pending request.)*
-7. You should now see **Health: OK** in the OpenClaw UI.
-
-![Health Ok](https://res.cloudinary.com/asset-cloudinary/image/upload/v1772139788/health_ok_swgk94.png)
+For Telegram or Discord, message your bot. If it replies with a pairing code, go to `/setup` → **Approve Channel Access**, choose the channel, and enter that code. This is separate from browser approval.
 
 ### Step 5: Start Chatting
 
-1. Click **"Chat"** in the sidebar of the newly opened OpenClaw UI
+1. Click **New conversation** in the OpenClaw sidebar
 2. Type your first message
 3. Enjoy your self-hosted AI assistant! 🎉
+
+### Upgrading an Existing Installation
+
+This template targets **OpenClaw 2026.10.4**. Keep your existing persistent volume mounted at `/data` when redeploying. The template migrates existing configuration and state during startup; allow the health check to complete before opening the UI. Older `OPENCLAW_VERSION` overrides are raised to this minimum supported version.
+
+Existing users do not need to run setup again. Use `/setup` → **Open OpenClaw UI** after the upgrade. Existing browser approvals are retained; a new browser or an import into another deployment may require pairing. Use **Export Data** first if you want a manual backup. **Reset configuration** and **Wipe all data** are not steps in an ordinary upgrade.
 
 ---
 
@@ -67,7 +67,7 @@ Deploying OpenClaw on Railway traditionally requires interactive terminal access
 
 ## Dependencies for OpenClaw (Prev Clawdbot, Moltbot) – Self-Hosted AI Agents Hosting
 
-- **AI Provider API Key**: Anthropic Claude, OpenAI GPT, Google Gemini, or other supported providers
+- **AI Provider Access**: An API key or a supported browser sign-in method for your chosen provider
 
 ### Deployment Dependencies
 
@@ -120,15 +120,21 @@ Deploying OpenClaw on Railway traditionally requires interactive terminal access
 6. Copy this token
 
 **Step 2: Add to OpenClaw**
+
+During initial setup:
+
 1. Go to your setup wizard: `/setup`
 2. Scroll to **"Optional: Channels"** section
 3. Paste token in **"Telegram bot token"** field
 4. Click **"Run Setup"**
 5. Wait for completion
 
+If setup is already complete, add the bot in the OpenClaw UI under **Settings → Channels**.
+
 **Step 3: Start Chatting**
 1. Search for your bot username in Telegram
 2. Click **"Start"** or send `/start`
+   If the bot replies with a pairing code, enter it in `/setup` → **Approve Channel Access** → **Telegram**.
 3. Begin chatting with your AI agent!
 
 ### How to Add a Discord Bot?
@@ -160,10 +166,15 @@ Deploying OpenClaw on Railway traditionally requires interactive terminal access
 5. Open URL in browser → Select server → Authorize
 
 **Step 4: Add to OpenClaw**
+
+During initial setup:
+
 1. Go to your setup wizard: `/setup`
 2. Paste token in **"Discord bot token"** field
 3. Click **"Run Setup"**
-4. Mention `@YourBotName` in Discord to chat!
+4. Open **Settings → Channels** in OpenClaw to configure the servers and channels the bot can access.
+
+If setup is already complete, add the bot in **Settings → Channels**. If a Discord DM returns a pairing code, enter it in `/setup` → **Approve Channel Access** → **Discord**.
 
 ---
 
@@ -198,20 +209,20 @@ Yes! OpenClaw is self-hosted, meaning:
 
 Absolutely! That's the beauty of self-hosting:
 
-1. Export a backup via `/setup`
-2. Download the `.tar.gz` file
-3. Deploy OpenClaw on another platform (VPS, Docker, home server)
-4. Import the backup on your new instance
+1. Open `/setup` → **Export Data** and download the password-protected `.zip` file.
+2. Run a compatible copy of this template on your destination platform (VPS, Docker, or home server).
+3. Open **Import Data** on the destination and use the source deployment's `SETUP_PASSWORD` to unlock the ZIP.
+4. Open the destination's OpenClaw UI and pair your browser again if prompted.
 
 ### Why is my OpenClaw UI gateway showing "Disconnected" after setup?
 
-This usually means:
-1. You haven't pasted the `OPENCLAW_GATEWAY_TOKEN` in the UI
-2. **Solution**: Go to Overview → Gateway Access → Paste token → Click Connect
+Follow the message shown by OpenClaw:
 
-Or:
-1. The gateway process crashed due to invalid API key
-2. **Solution**: Check Railway logs, verify API key, re-run setup if needed
+- **Starting up**: wait for the Gateway to become ready.
+- **This Gateway expects its token** or **Gateway secret rejected**: use `/setup` → **Copy Gateway Token**, paste it into **Gateway secret**, then click **Connect**. For an existing connection, these settings are under **Settings → Gateway**.
+- **Approve this browser**: keep that tab open and approve its matching request in `/setup` → **Pair Devices**. Return to OpenClaw and use **Check now** if needed.
+
+If the problem continues, check Railway logs. After an update, refresh the OpenClaw tab if it is still showing the previous interface. You do not need to wipe your data to reconnect a browser.
 
 ### Can I use OpenClaw without any messaging channels?
 
@@ -230,8 +241,7 @@ Yes! Each Railway service can run its own independent OpenClaw instance. Just de
 
 ### How to fix: disconnected (1008): pairing required
 
-If you see this error in your dashboard logs or get instantly disconnected when opening the UI, it's a security feature! New browsers/devices need to be manually approved.
-**Solution**: Go back to your `/setup` wizard page, click the **Approve Pairing** button on the right side, and approve the pending connection request.
+Keep the OpenClaw tab open. Return to `/setup` → **Pair Devices** and approve the request with the same ID shown by OpenClaw. Then return to the waiting tab; it connects automatically, or you can click **Check now**. The command shown by OpenClaw is an alternative; you can use this template's buttons for browser approval.
 
 ### 🖥️ How do I access the Terminal UI (TUI)?
 
@@ -239,9 +249,9 @@ If you prefer a hacker-style terminal interface over the web dashboard, you can 
 
 ### 🔌 How do I add more channels (Telegram/Discord) later?
 
-You have two easy options if you skipped adding channels during your initial configuration:
-1. **From the Dashboard**: Open your main OpenClaw UI, navigate to the config/settings section, and paste your tokens directly.
-2. **From the Setup Wizard**: Revisit your `/setup` page, enter the new bot tokens in the Channels section, and hit "Run Setup" again to smoothly update your configuration.
+Open **Settings → Channels** in the OpenClaw UI to add or update a channel. If a Telegram or Discord bot replies with a pairing code, enter it in `/setup` → **Approve Channel Access**.
+
+The original provider/channel form is hidden after setup completes. To intentionally run that wizard again, use `/setup` → **Reset configuration** first. This removes `openclaw.json` while retaining chat history, memory, credentials, paired devices, and the Gateway token.
 
 ---
 
